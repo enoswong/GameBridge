@@ -9,6 +9,7 @@ tracked = subprocess.check_output(['git', 'ls-files', '-z'], cwd=root).decode().
 files = set(p for p in tracked if p and not p.startswith(('docs/', 'Libraries/', '.github/', 'images/')))
 files.discard('README.md')
 files.add('docs/release/README-public.md')
+files.update(['docs/COMMANDS.md', 'docs/i18n/README.en.md', 'docs/i18n/README.zh-CN.md'])
 for base in ['WhiskyKit/Sources/WhiskyKit/GameBridge', 'WhiskyKit/Tests/WhiskyKitTests']:
     files.update(str(p.relative_to(root)) for p in (root/base).glob('*.swift'))
 files.update(['scripts/package-bootstrap.py', 'scripts/test-bootstrap-packaging.py', 'scripts/embed-bootstrap.sh', 'scripts/export-public-source.py'])

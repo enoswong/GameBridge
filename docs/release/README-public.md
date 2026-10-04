@@ -1,5 +1,7 @@
 # GameBridge
 
+**繁體中文** · [简体中文](https://github.com/enoswong/GameBridge/blob/main/docs/i18n/README.zh-CN.md) · [English](https://github.com/enoswong/GameBridge/blob/main/docs/i18n/README.en.md) · [指令教學 / Commands](https://github.com/enoswong/GameBridge/blob/main/docs/COMMANDS.md)
+
 GameBridge 是基於 [Whisky](https://github.com/Whisky-App/Whisky) 開發的 macOS Windows 遊戲執行與環境管理工具，為 Apple Silicon Mac 提供 Windows Steam 設定、獨立容器與遊戲相容性處理。
 
 目標是讓你透過一次設定，準備 Windows Steam、必要元件及適用的相容性修正，之後直接從 GameBridge 開啟 Steam 安裝和遊玩 Windows 遊戲。
@@ -19,6 +21,7 @@ GameBridge 是基於 [Whisky](https://github.com/Whisky-App/Whisky) 開發的 ma
 - [容器管理與資料位置](#容器管理與資料位置)
 - [更新與備份](#更新與備份)
 - [常見問題](#常見問題)
+- [指令教學](#指令教學)
 - [回報問題](#回報問題)
 - [開發者建置](#開發者建置)
 - [來源與授權](#來源與授權)
@@ -190,6 +193,10 @@ Windows 安裝視窗中的 `C:` 是容器磁碟，不是 macOS「應用程式」
 
 DirectX June 2010 元件安裝與 DXMT 圖形轉譯是不同步驟；「缺少圖形功能」不一定能靠重裝 DirectX 解決。反作弊、DRM、影片播放或其他遊戲依賴的支援程度，也需要按遊戲實測。
 
+## 指令教學
+
+一般使用毋須輸入指令。需要檢查版本、列出環境、啟動 Steam、恢復狀態或建置源碼時，請參閱[繁中／簡中／英文指令教學](https://github.com/enoswong/GameBridge/blob/main/docs/COMMANDS.md)。指令在 macOS「終端機」執行，不是 Windows CMD；文件翻譯不代表 app 介面已翻譯。
+
 ## 回報問題
 
 請到 [GitHub Issues](https://github.com/enoswong/GameBridge/issues) 提供：
@@ -211,7 +218,7 @@ swift test --package-path WhiskyKit
 bash scripts/build-local.sh
 ```
 
-本機建置輸出為 `build/local/Build/Products/Debug/GameBridge.app`。建置腳本使用固定的套件解析設定；若依賴尚未下載，先以 Xcode 開啟 `Whisky.xcodeproj` 並完成套件解析，再執行建置。
+本機建置輸出為 `build/local/Build/Products/Debug/GameBridge.app`。建置腳本使用固定的套件解析設定；若依賴尚未下載，先依[指令教學](https://github.com/enoswong/GameBridge/blob/main/docs/COMMANDS.md)將套件解析到建置腳本使用的目錄，再執行建置。
 
 此腳本產生未簽署 Debug 版本，不代表完整公開發行包。Bootstrap 引擎資源需另外準備；詳見 [發佈狀態](https://github.com/enoswong/GameBridge/blob/main/docs/release/STATUS.md) 與 [引擎來源核對報告](https://github.com/enoswong/GameBridge/blob/main/docs/release/RUNTIME-AUDIT-2026-10-04.md)。
 
