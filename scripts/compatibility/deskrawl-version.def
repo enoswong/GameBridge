@@ -1,0 +1,18 @@
+LIBRARY version
+EXPORTS
+    VerFindFileA=gb_VerFindFileA
+    VerFindFileW=gb_VerFindFileW
+    VerInstallFileA=gb_VerInstallFileA
+    VerInstallFileW=gb_VerInstallFileW
+    GetFileVersionInfoSizeA=gb_GetFileVersionInfoSizeA
+    GetFileVersionInfoSizeW=gb_GetFileVersionInfoSizeW
+    GetFileVersionInfoSizeExA=gb_GetFileVersionInfoSizeExA
+    GetFileVersionInfoSizeExW=gb_GetFileVersionInfoSizeExW
+    GetFileVersionInfoA=gb_GetFileVersionInfoA
+    GetFileVersionInfoW=gb_GetFileVersionInfoW
+    GetFileVersionInfoExA=gb_GetFileVersionInfoExA
+    GetFileVersionInfoExW=gb_GetFileVersionInfoExW
+    VerLanguageNameA=gb_VerLanguageNameA
+    VerLanguageNameW=gb_VerLanguageNameW
+    VerQueryValueA=gb_VerQueryValueA
+    VerQueryValueW=gb_VerQueryValueW

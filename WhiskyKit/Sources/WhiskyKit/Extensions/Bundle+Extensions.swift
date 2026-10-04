@@ -20,6 +20,8 @@ import Foundation
 
 public extension Bundle {
     static var whiskyBundleIdentifier: String {
-        return Bundle.main.bundleIdentifier ?? "com.isaacmarovitz.Whisky"
+        // GUI, CLI, and helper bundles share one product data namespace.
+        // Do not fall back to Whisky or derive paths from the caller's bundle.
+        return "com.enos.GameBridge"
     }
 }

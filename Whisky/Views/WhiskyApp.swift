@@ -28,7 +28,7 @@ struct WhiskyApp: App {
     private let updaterController: SPUStandardUpdaterController
 
     init() {
-        updaterController = SPUStandardUpdaterController(startingUpdater: true,
+        updaterController = SPUStandardUpdaterController(startingUpdater: false,
                                                          updaterDelegate: nil,
                                                          userDriverDelegate: nil)
     }
@@ -50,17 +50,13 @@ struct WhiskyApp: App {
         .handlesExternalEvents(matching: ["{same path of URL?}"])
         .commands {
             CommandGroup(after: .appInfo) {
-                SparkleView(updater: updaterController.updater)
+                Button("check.updates") {}
+                    .disabled(true)
             }
             CommandGroup(before: .systemServices) {
                 Divider()
                 Button("open.setup") {
                     showSetup = true
-                }
-                Button("install.cli") {
-                    Task {
-                        await WhiskyCmd.install()
-                    }
                 }
             }
             CommandGroup(replacing: .newItem) {}
@@ -81,6 +77,7 @@ struct WhiskyApp: App {
                     }
                 }
                 .keyboardShortcut("I", modifiers: [.command])
+                .disabled(!WhiskyWineInstaller.isWhiskyWineInstalled())
             }
             CommandGroup(after: .importExport) {
                 Button("open.logs") {
@@ -98,17 +95,12 @@ struct WhiskyApp: App {
             }
             CommandGroup(replacing: .help) {
                 Button("help.website") {
-                    if let url = URL(string: "https://getwhisky.app/") {
+                    if let url = URL(string: "https://github.com/Whisky-App/Whisky") {
                         openURL(url)
                     }
                 }
                 Button("help.github") {
                     if let url = URL(string: "https://github.com/Whisky-App/Whisky") {
-                        openURL(url)
-                    }
-                }
-                Button("help.discord") {
-                    if let url = URL(string: "https://discord.gg/CsqAfs9CnM") {
                         openURL(url)
                     }
                 }

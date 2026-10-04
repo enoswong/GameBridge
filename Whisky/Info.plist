@@ -53,10 +53,6 @@
 			</array>
 		</dict>
 	</array>
-	<key>SUFeedURL</key>
-	<string>https://data.getwhisky.app/appcast.xml</string>
-	<key>SUPublicEDKey</key>
-	<string>tnZFAvPUfCpM7Tr7Sx5gKRm6BUQQ6htJQeOMP44evms=</string>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
@@ -102,5 +98,9 @@
 			</dict>
 		</dict>
 	</array>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
+	<key>CFBundleDisplayName</key>
+	<string>GameBridge</string>
 </dict>
 </plist>

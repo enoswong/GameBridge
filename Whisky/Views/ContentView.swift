@@ -36,6 +36,8 @@ struct ContentView: View {
     @State private var refreshAnimation: Angle = .degrees(0)
 
     @State private var bottleFilter = ""
+    @State private var managedEnvironments: [RuntimeEnvironment] = []
+    @State private var managedError = ""
 
     var body: some View {
         NavigationSplitView {
@@ -46,7 +48,7 @@ struct ContentView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    showBottleCreation.toggle()
+                    showSetup = true
                 } label: {
                     Image(systemName: "plus")
                         .help("button.createBottle")
@@ -55,6 +57,7 @@ struct ContentView: View {
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     bottleVM.loadBottles()
+                    Task { await refreshManagedEnvironments() }
                     if let bottle = bottleVM.bottles.first(where: { $0.url == selected }) {
                         bottle.updateInstalledPrograms()
                     }
@@ -87,9 +90,14 @@ struct ContentView: View {
         }
         .handlesExternalEvents(preferring: [], allowing: ["*"])
         .onOpenURL { url in
+            guard WhiskyWineInstaller.isWhiskyWineInstalled() else {
+                showSetup = true
+                return
+            }
             openedFileURL = url
         }
         .task {
+            await refreshManagedEnvironments()
             bottleVM.loadBottles()
             bottlesLoaded = true
 
@@ -101,6 +109,8 @@ struct ContentView: View {
                 }
             }
 
+            if selected == nil { selected = managedEnvironments.first?.prefix }
+            if !managedEnvironments.isEmpty { return }
             if !WhiskyWineInstaller.isWhiskyWineInstalled() {
                 showSetup = true
             }
@@ -127,12 +137,32 @@ struct ContentView: View {
                 }
             }
         }
+        .task {
+            while !Task.isCancelled {
+                await refreshManagedEnvironments()
+                do { try await Task.sleep(for: .seconds(3)) } catch { break }
+            }
+        }
     }
 
     var sidebar: some View {
         ScrollViewReader { proxy in
             List(selection: $selected) {
-                Section {
+                Section("Windows 環境") {
+                    ForEach(managedEnvironments.filter { bottleFilter.isEmpty || $0.name.localizedCaseInsensitiveContains(bottleFilter) }) { environment in
+                        Label {
+                            VStack(alignment: .leading) {
+                                Text(environment.name)
+                                Text(environment.status == .running ? "執行中" : environment.status == .needsAttention ? "需要恢復" : "已建立")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        } icon: { Image(systemName: "desktopcomputer") }
+                            .tag(environment.prefix)
+                    }
+                    if managedEnvironments.isEmpty { Text("尚未建立 Windows 環境").foregroundStyle(.secondary) }
+                    if !managedError.isEmpty { Text(managedError).font(.caption).foregroundStyle(.red) }
+                }
+                Section("舊版容器") {
                     ForEach(filteredBottles) { bottle in
                         Group {
                             if bottle.inFlight {
@@ -169,7 +199,11 @@ struct ContentView: View {
     @ViewBuilder
     var detail: some View {
         if let bottle = selected {
-            if let bottle = bottleVM.bottles.first(where: { $0.url == bottle }) {
+            if let environment = managedEnvironments.first(where: { $0.prefix == bottle }) {
+                ScrollView {
+                    SetupView(showSetup: $showSetup, firstTime: false, initialEnvironment: environment.id, embedded: true)
+                }.id(environment.id)
+            } else if let bottle = bottleVM.bottles.first(where: { $0.url == bottle }) {
                 BottleView(bottle: bottle)
                     .disabled(bottle.inFlight)
                     .id(bottle.url)
@@ -179,7 +213,7 @@ struct ContentView: View {
                 VStack {
                     Text("main.createFirst")
                     Button {
-                        showBottleCreation.toggle()
+                    showSetup = true
                     } label: {
                         HStack {
                             Image(systemName: "plus")
@@ -192,6 +226,17 @@ struct ContentView: View {
                 }
             }
         }
+    }
+
+    @MainActor private func refreshManagedEnvironments() async {
+        do {
+            let coordinator = try EnvironmentCoordinator(root: GameBridgePaths.dataRoot)
+            managedEnvironments = try await coordinator.environments().sorted { $0.createdAt < $1.createdAt }
+            managedError = ""
+            if let selected, !managedEnvironments.contains(where: { $0.prefix == selected }),
+               !bottleVM.bottles.contains(where: { $0.url == selected }) { self.selected = nil }
+            if selected == nil { selected = managedEnvironments.first?.prefix }
+        } catch { managedError = error.localizedDescription }
     }
 
     var filteredBottles: [Bottle] {

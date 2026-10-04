@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "retrievedAt": "2026-10-03",
+  "language": "en",
+  "installerExecution": false,
+  "terms": [
+    {
+      "id": "microsoft-vc14",
+      "installerIDs": [
+        "vc-x64",
+        "vc-x86"
+      ],
+      "installerVersion": "14.51.36247.0",
+      "textFile": "microsoft-vc14-en.txt",
+      "textSHA256": "441867162c8327509a08a9c626a5d1c2df2544a7859df0aeb94cd22229208869",
+      "licenseURLFromBothInstallerManifests": "https://aka.ms/VCRedistLicense",
+      "resolvedLicensePage": "https://visualstudio.microsoft.com/license-terms/vs2026-ga-visualcpp-v14-redist-runtime/",
+      "sourceDocumentURL": "https://visualstudio.microsoft.com/wp-content/uploads/2025/10/Visual-C-V14-License-Redistributable_and_Runtime_ENU.docx",
+      "sourceDocumentSHA256": "08651651a7602fc7c0e2763de0fde1ff9f868df2780597cd1775ee9d6441c783",
+      "extraction": "cabextract member 0 maps u17 to BootstrapperApplicationData.xml; both u17 files contain WixStdbaInformation LicenseUrl; linked Microsoft DOCX word/document.xml paragraph text converted to UTF-8",
+      "manifestSHA256s": {
+        "x64": "e82e62b82a1b09568e74a224c454bdcd41240b9f24cfc42fb2c5e0783345af7f",
+        "x86": "92d45ae6577ccc7fede5de3dfd7ac8d93496e35e270823eedffa837ee4b1d059"
+      },
+      "bootstrapperApplicationDataSHA256s": {
+        "x64": "0af0673e1f3ca87701e3c00d5ff004fccb00e2a983df1d72671c429cfef7f3c5",
+        "x86": "ff57b450cc6387d0f62c76562bb9edba295803c75cda7e0ee0e448d9f741726e"
+      }
+    },
+    {
+      "id": "microsoft-directx-june2010",
+      "installerIDs": [
+        "directx"
+      ],
+      "textFile": "microsoft-directx-june2010-en.txt",
+      "textSHA256": "5d932ee09637bbc4506bf20b338284bf03d784cb73bd9d17d5900c80a970d297",
+      "cabinetMember": "dsetup32.dll",
+      "memberSHA256": "fb0e534f9b0926e518f1c2980640dfd29f14217cdfa37cf3a0c13349127ed9a8",
+      "resourceType": "DATA",
+      "resourceName": "SETUP_AGREEMENT_ENG",
+      "resourceSHA256": "55eaf19bbbbcc80e36e22e3bac1842413376874505b4927abd7eb0c203987771",
+      "resourceBytes": 4849,
+      "extraction": "cabextract dsetup32.dll; static PE resource directory parser; English agreement resource (identical across listed resource languages); decode Windows-1252, strip terminal NUL, normalize CRLF to LF"
+    }
+  ],
+  "installers": [
+    {
+      "id": "vc-x64",
+      "fileName": "VC_redist.x64.exe",
+      "url": "https://aka.ms/vc14/vc_redist.x64.exe",
+      "sha256": "843068991daaa1f73ad9f6239bce4d0f6a07a51f18c37ea2a867e9beca71295c"
+    },
+    {
+      "id": "vc-x86",
+      "fileName": "VC_redist.x86.exe",
+      "url": "https://aka.ms/vc14/vc_redist.x86.exe",
+      "sha256": "f0bab33a302b3cdb2e11113760d016f54fd3d2632c65ba7834fac4f0abd7f1a3"
+    },
+    {
+      "id": "directx",
+      "fileName": "directx_Jun2010_redist.exe",
+      "url": "https://download.microsoft.com/download/8/4/a/84a35bf1-dafe-4ae8-82af-ad2ae20b6b14/directx_Jun2010_redist.exe",
+      "sha256": "053f76dcbb28802e23341b6a787e3b0791c0fa5c8d4d011b1044172dbf89c73b"
+    }
+  ]
+}

@@ -17,6 +17,7 @@
 //
 
 import Foundation
+import Darwin
 import os.log
 
 public enum ProcessOutput: Hashable {
@@ -27,66 +28,50 @@ public enum ProcessOutput: Hashable {
 }
 
 public extension Process {
-    /// Run the process returning a stream output
-    func runStream(name: String, fileHandle: FileHandle?) throws -> AsyncStream<ProcessOutput> {
-        let stream = makeStream(name: name, fileHandle: fileHandle)
-        self.logProcessInfo(name: name)
-        fileHandle?.writeInfo(for: self)
-        try run()
-        return stream
-    }
-
-    private func makeStream(name: String, fileHandle: FileHandle?) -> AsyncStream<ProcessOutput> {
-        let pipe = Pipe()
-        let errorPipe = Pipe()
-        standardOutput = pipe
-        standardError = errorPipe
-
-        return AsyncStream<ProcessOutput> { continuation in
-            continuation.onTermination = { termination in
-                switch termination {
-                case .finished:
-                    break
-                case .cancelled:
-                    guard self.isRunning else { return }
-                    self.terminate()
-                @unknown default:
-                    break
-                }
-            }
-
-            continuation.yield(.started(self))
-
-            pipe.fileHandleForReading.readabilityHandler = { pipe in
-                guard let line = pipe.nextLine() else { return }
-                continuation.yield(.message(line))
-                guard !line.isEmpty else { return }
-                Logger.wineKit.info("\(line, privacy: .public)")
-                fileHandle?.write(line: line)
-            }
-
-            errorPipe.fileHandleForReading.readabilityHandler = { pipe in
-                guard let line = pipe.nextLine() else { return }
-                continuation.yield(.error(line))
-                guard !line.isEmpty else { return }
-                Logger.wineKit.warning("\(line, privacy: .public)")
-                fileHandle?.write(line: line)
-            }
-
-            terminationHandler = { (process: Process) in
+    /// Drain both pipes concurrently; emit termination only after their final bytes.
+    func runStream(name: String, fileHandle: FileHandle?, drainTimeout: TimeInterval? = nil) throws -> AsyncStream<ProcessOutput> {
+        let drainDeadline = drainTimeout.map { ProcessInfo.processInfo.systemUptime + $0 }
+        let output = Pipe()
+        let errors = Pipe()
+        standardOutput = output
+        standardError = errors
+        let (stream, continuation) = AsyncStream<ProcessOutput>.makeStream()
+        let state = ProcessStreamState(continuation: continuation, log: fileHandle)
+        let group = DispatchGroup()
+        group.enter() // child exit
+        terminationHandler = { _ in group.leave() }
+        continuation.onTermination = { [weak self] reason in
+            if case .cancelled = reason, let self, self.isRunning { self.terminate() }
+        }
+        do {
+            try run()
+        } catch {
+            terminationHandler = nil
+            group.leave()
+            try? fileHandle?.close()
+            continuation.finish()
+            throw error
+        }
+        continuation.yield(.started(self))
+        for (handle, isError) in [(output.fileHandleForReading, false), (errors.fileHandleForReading, true)] {
+            group.enter()
+            DispatchQueue.global(qos: .utility).async {
+                defer { try? handle.close(); group.leave() }
+                var decoder = ProcessUTF8Decoder()
                 do {
-                    _ = try pipe.fileHandleForReading.readToEnd()
-                    _ = try errorPipe.fileHandleForReading.readToEnd()
-                    try fileHandle?.close()
+                    while let bytes = try ProcessPipeReader.read(handle, deadline: drainDeadline), !bytes.isEmpty {
+                        state.emit(decoder.append(bytes), isError: isError)
+                    }
+                    state.emit(decoder.finish(), isError: isError)
                 } catch {
-                    Logger.wineKit.error("Error while clearing data: \(error)")
+                    state.emit("Output read failed: \(error.localizedDescription)", isError: true)
                 }
-
-                process.logTermination(name: name)
-                continuation.yield(.terminated(process))
-                continuation.finish()
             }
         }
+        group.notify(queue: .global(qos: .utility)) {
+            state.finish(process: self)
+        }
+        return stream
     }
 
     private func logTermination(name: String) {
@@ -119,13 +104,83 @@ public extension Process {
     }
 }
 
-extension FileHandle {
-    func nextLine() -> String? {
-        guard let line = String(data: availableData, encoding: .utf8) else { return nil }
-        if !line.isEmpty {
-            return line
-        } else {
-            return nil
+// The two pipe readers serialize log writes and stream completion through this object.
+private final class ProcessStreamState: @unchecked Sendable {
+    private let lock = NSLock()
+    private let continuation: AsyncStream<ProcessOutput>.Continuation
+    private let log: FileHandle?
+
+    init(continuation: AsyncStream<ProcessOutput>.Continuation, log: FileHandle?) {
+        self.continuation = continuation
+        self.log = log
+    }
+
+    func emit(_ text: String, isError: Bool) {
+        guard !text.isEmpty else { return }
+        lock.lock()
+        defer { lock.unlock() }
+        continuation.yield(isError ? .error(text) : .message(text))
+        log?.write(line: text)
+    }
+
+    func finish(process: Process) {
+        lock.lock()
+        defer { lock.unlock() }
+        try? log?.close()
+        continuation.yield(.terminated(process))
+        continuation.finish()
+    }
+}
+
+/// Retains at most the incomplete trailing UTF-8 sequence between pipe reads.
+struct ProcessUTF8Decoder {
+    private var pending = Data()
+
+    mutating func append(_ bytes: Data) -> String {
+        pending.append(bytes)
+        let values = Array(pending)
+        var end = values.count
+        var start = end
+        while start > 0 && end - start < 3 && values[start - 1] & 0xc0 == 0x80 { start -= 1 }
+        if start > 0 {
+            let lead = values[start - 1]
+            let required = lead >= 0xf0 && lead <= 0xf4 ? 4 :
+                (lead >= 0xe0 && lead <= 0xef ? 3 : (lead >= 0xc2 && lead <= 0xdf ? 2 : 1))
+            if required > end - (start - 1) { end = start - 1 }
         }
+        let text = String(decoding: pending.prefix(end), as: UTF8.self)
+        pending = Data(pending.dropFirst(end))
+        return text
+    }
+
+    mutating func finish() -> String {
+        defer { pending.removeAll() }
+        return String(decoding: pending, as: UTF8.self)
+    }
+}
+
+private enum ProcessPipeReader {
+    static func read(_ handle: FileHandle, deadline: TimeInterval?) throws -> Data? {
+        guard let deadline else { return try handle.read(upToCount: 65536) }
+        // A version probe may exit while a descendant still owns a pipe. Bound pipe
+        // drain separately from direct-process termination, without killing other Wine sessions.
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            var descriptor = pollfd(fd: handle.fileDescriptor, events: Int16(POLLIN | POLLHUP), revents: 0)
+            let result = poll(&descriptor, 1, 50)
+            if result < 0 {
+                if errno == EINTR { continue }
+                throw RuntimeError.io("poll child output")
+            }
+            if result == 0 { continue }
+            var data = Data(count: 65536)
+            let count = data.withUnsafeMutableBytes { Darwin.read(handle.fileDescriptor, $0.baseAddress, $0.count) }
+            if count < 0 {
+                if errno == EINTR { continue }
+                throw RuntimeError.io("read child output")
+            }
+            data.count = count
+            return data
+        }
+        return nil
     }
 }
