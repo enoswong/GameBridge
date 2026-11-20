@@ -7,7 +7,8 @@ final class ProcessStreamTests: XCTestCase {
     func testUTF8SplitAcrossReadsIsPreserved() async throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", "printf '\\344'; sleep 0.1; printf '\\270'; sleep 0.1; printf '\\255'; printf ' done'"]
+        process.arguments = [
+            "-c", "printf '\\344'; sleep 0.1; printf '\\270'; sleep 0.1; printf '\\255'; printf ' done'"]
         var text = ""
         var ended = false
         for await output in try process.runStream(name: "utf8-fixture", fileHandle: nil) {
@@ -24,7 +25,8 @@ final class ProcessStreamTests: XCTestCase {
     func testBothPipesAreDrainedBeforeTermination() async throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", "awk 'BEGIN { for (i=0;i<16384;i++) printf \"abcdefgh\"; }'; printf 'stderr-tail' >&2; exit 7"]
+        process.arguments = [
+            "-c", "awk 'BEGIN { for (i=0;i<16384;i++) printf \"abcdefgh\"; }'; printf 'stderr-tail' >&2; exit 7"]
         var stdout = ""
         var stderr = ""
         var exitStatus: Int32?

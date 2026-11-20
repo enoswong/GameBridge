@@ -33,7 +33,8 @@ final class RuntimeSecurityTests: XCTestCase {
         envelope.keyID = "attacker"
         XCTAssertThrowsError(try verifier.verify(envelope, now: RuntimeFixture.now, previous: nil))
         envelope = try RuntimeFixture.sign(RuntimeFixture.catalog(), key: key)
-        XCTAssertThrowsError(try verifier.verify(envelope, now: RuntimeFixture.now.addingTimeInterval(7200), previous: nil))
+        XCTAssertThrowsError(try verifier.verify(envelope, now: RuntimeFixture.now.addingTimeInterval(7200),
+            previous: nil))
         let previous = CatalogState(revision: 2, payloadSHA256: String(repeating: "a", count: 64), revokedEngineIDs: [])
         XCTAssertThrowsError(try verifier.verify(envelope, now: RuntimeFixture.now, previous: previous))
     }
@@ -46,10 +47,13 @@ final class RuntimeSecurityTests: XCTestCase {
         XCTAssertNoThrow(try verifier.verify(envelope, now: RuntimeFixture.now, previous: verified.state))
         var changed = RuntimeFixture.catalog()
         changed.expiresAt += 1
-        XCTAssertThrowsError(try verifier.verify(RuntimeFixture.sign(changed, key: key), now: RuntimeFixture.now, previous: verified.state))
+        XCTAssertThrowsError(try verifier.verify(RuntimeFixture.sign(
+            changed, key: key), now: RuntimeFixture.now, previous: verified.state))
         changed.revision = 2
-        let revoked = CatalogState(revision: 1, payloadSHA256: verified.state.payloadSHA256, revokedEngineIDs: ["old-engine"])
-        XCTAssertThrowsError(try verifier.verify(RuntimeFixture.sign(changed, key: key), now: RuntimeFixture.now, previous: revoked))
+        let revoked = CatalogState(
+            revision: 1, payloadSHA256: verified.state.payloadSHA256, revokedEngineIDs: ["old-engine"])
+        XCTAssertThrowsError(try verifier.verify(RuntimeFixture.sign(
+            changed, key: key), now: RuntimeFixture.now, previous: revoked))
     }
 
     func testManifestRejectsTraversalAndUnsupportedSchema() throws {
@@ -76,7 +80,8 @@ enum RuntimeFixture {
                        archiveSHA256: String(repeating: "a", count: 64), archiveBytes: 4096,
                        unpackedBytes: 4096,
                        sources: [RuntimeSource(name: "fixture", url: "https://example.invalid/source",
-                                               revision: String(repeating: "b", count: 40), license: "GPL-3.0-or-later")],
+                                               revision: String(
+                                                   repeating: "b", count: 40), license: "GPL-3.0-or-later")],
                        patchSHA256s: [], toolchain: "test-fixture-only", dependencySHA256s: [:],
                        testReferences: [], distribution: .internalOnly)
     }

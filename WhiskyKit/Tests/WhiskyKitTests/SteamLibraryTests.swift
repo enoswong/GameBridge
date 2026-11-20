@@ -15,7 +15,8 @@ final class SteamLibraryTests: XCTestCase {
         XCTAssertEqual(try folder.string("label"), "A \"quote\"")
     }
     func testTruncatedOrDuplicateMetadataIsNotAnEmptyLibrary() {
-        for text in [#""libraryfolders" { "0" { "path" "cut""#, #""a" "1" "a" "2""#, #""a" { "b" }"#, #""a" "unterminated"#] {
+        for text in [#""libraryfolders" { "0" { "path" "cut""#, #""a" "1" "a" "2""#, #""a" { "b" }"#,
+            #""a" "unterminated"#] {
             XCTAssertThrowsError(try ValveKeyValues.parse(text))
         }
     }
@@ -24,8 +25,14 @@ final class SteamLibraryTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let apps = root.appending(path: "steamapps")
         try FileManager.default.createDirectory(at: apps, withIntermediateDirectories: true)
-        try #""AppState" { "appid" "480" "name" "測試 Game" "installdir" "Demo Game" "buildid" "12345" "StateFlags" "4" }"#.write(to: apps.appending(path: "appmanifest_480.acf"), atomically: true, encoding: .utf8)
-        try #""AppState" { "appid" "570""#.write(to: apps.appending(path: "appmanifest_570.acf"), atomically: true, encoding: .utf8)
+        let validManifest = #"""
+        "AppState" {
+            "appid" "480" "name" "測試 Game" "installdir" "Demo Game" "buildid" "12345" "StateFlags" "4"
+        }
+        """#
+        try validManifest.write(to: apps.appending(path: "appmanifest_480.acf"), atomically: true, encoding: .utf8)
+        try #""AppState" { "appid" "570""#.write(to: apps.appending(
+            path: "appmanifest_570.acf"), atomically: true, encoding: .utf8)
         let snapshot = try SteamLibraryScanner.scanNativeMac(steamRoot: root)
         XCTAssertEqual(snapshot.games.map(\.appID), [480])
         XCTAssertEqual(snapshot.games.first?.platform, .nativeMacOS)
@@ -37,7 +44,12 @@ final class SteamLibraryTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let apps = root.appending(path: "steamapps")
         try FileManager.default.createDirectory(at: apps, withIntermediateDirectories: true)
-        try #""AppState" { "appid" "481" "name" "bad" "installdir" "../../outside" "StateFlags" "4" }"#.write(to: apps.appending(path: "appmanifest_480.acf"), atomically: true, encoding: .utf8)
+        let invalidManifest = #"""
+        "AppState" {
+            "appid" "481" "name" "bad" "installdir" "../../outside" "StateFlags" "4"
+        }
+        """#
+        try invalidManifest.write(to: apps.appending(path: "appmanifest_480.acf"), atomically: true, encoding: .utf8)
         let snapshot = try SteamLibraryScanner.scanNativeMac(steamRoot: root)
         XCTAssertTrue(snapshot.games.isEmpty)
         XCTAssertEqual(snapshot.issues.count, 1)
@@ -88,23 +100,27 @@ final class SteamLibraryTests: XCTestCase {
 
     private func writeWindowsSteam(to file: URL) throws {
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        var pe = Data(repeating: 0, count: 128)
-        pe[0] = 0x4d; pe[1] = 0x5a; pe[0x3c] = 64
-        pe[64] = 0x50; pe[65] = 0x45; pe[68] = 0x4c; pe[69] = 0x01
-        try pe.write(to: file)
+        var header = Data(repeating: 0, count: 128)
+        header[0] = 0x4d; header[1] = 0x5a; header[0x3c] = 64
+        header[64] = 0x50; header[65] = 0x45; header[68] = 0x4c; header[69] = 0x01
+        try header.write(to: file)
     }
 
     func testWindowsSteamMustBeAPEBinaryAndLaunchUsesItsPrefix() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let steam = root.appending(path: "drive_c/Program Files (x86)/Steam/Steam.exe")
-        try FileManager.default.createDirectory(at: steam.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: steam.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("native-MachO-not-Windows".utf8).write(to: steam)
-        XCTAssertThrowsError(try WindowsSteamCommand(prefix: root, steamRelativePath: "drive_c/Program Files (x86)/Steam/Steam.exe", appID: 480))
+        XCTAssertThrowsError(try WindowsSteamCommand(
+            prefix: root, steamRelativePath: "drive_c/Program Files (x86)/Steam/Steam.exe", appID: 480))
         try writeWindowsSteam(to: steam)
-        let command = try WindowsSteamCommand(prefix: root, steamRelativePath: "drive_c/Program Files (x86)/Steam/Steam.exe", appID: 480)
+        let command = try WindowsSteamCommand(
+            prefix: root, steamRelativePath: "drive_c/Program Files (x86)/Steam/Steam.exe", appID: 480)
         XCTAssertEqual(command.arguments, [steam.path, "-cef-disable-gpu", "-applaunch", "480"])
-        let library = try WindowsSteamCommand(prefix: root, steamRelativePath: "drive_c/Program Files (x86)/Steam/Steam.exe", appID: nil)
+        let library = try WindowsSteamCommand(
+            prefix: root, steamRelativePath: "drive_c/Program Files (x86)/Steam/Steam.exe", appID: nil)
         XCTAssertEqual(library.arguments, [steam.path, "-cef-disable-gpu"])
         XCTAssertEqual(command.environment["WINEPREFIX"], root.path)
         XCTAssertFalse(command.arguments.contains(where: { $0.contains("steam://") }))

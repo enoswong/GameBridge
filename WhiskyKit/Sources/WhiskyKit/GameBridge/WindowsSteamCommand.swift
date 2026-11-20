@@ -6,7 +6,8 @@ public struct WindowsSteamCommand: Sendable {
     public let environment: [String: String]
     public init(prefix: URL, steamRelativePath: String, appID: UInt32?) throws {
         let executable = try ManagedPath.child(steamRelativePath, under: prefix)
-        guard executable.lastPathComponent.lowercased() == "steam.exe" else { throw SteamMetadataError.notWindowsExecutable }
+        guard executable.lastPathComponent.lowercased() == "steam.exe" else {
+            throw SteamMetadataError.notWindowsExecutable }
         try Self.validatePE(executable)
         if let appID, appID == 0 { throw SteamMetadataError.malformed }
         // CEF's D3D11 window surfaces can fail under Wine/DXMT independently of
@@ -23,13 +24,15 @@ public struct WindowsSteamCommand: Sendable {
 
     public static func validatePE(_ file: URL) throws {
         let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
-        guard values.isRegularFile == true, values.isSymbolicLink != true else { throw SteamMetadataError.notWindowsExecutable }
+        guard values.isRegularFile == true, values.isSymbolicLink != true else {
+            throw SteamMetadataError.notWindowsExecutable }
         let handle = try FileHandle(forReadingFrom: file)
         defer { try? handle.close() }
         guard let header = try handle.read(upToCount: 64), header.count == 64,
               header[0] == 0x4d, header[1] == 0x5a else { throw SteamMetadataError.notWindowsExecutable }
         let offset = (0..<4).reduce(UInt64(0)) { $0 | UInt64(header[0x3c + $1]) << ($1 * 8) }
-        guard offset >= 64, offset + 6 <= UInt64(values.fileSize ?? 0) else { throw SteamMetadataError.notWindowsExecutable }
+        guard offset >= 64, offset + 6 <= UInt64(
+            values.fileSize ?? 0) else { throw SteamMetadataError.notWindowsExecutable }
         try handle.seek(toOffset: offset)
         guard let signature = try handle.read(upToCount: 6), signature.count == 6,
               Array(signature.prefix(4)) == [0x50, 0x45, 0, 0],

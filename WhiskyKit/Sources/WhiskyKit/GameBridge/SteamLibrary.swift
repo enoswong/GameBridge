@@ -54,58 +54,85 @@ public enum SteamLibraryScanner {
     ) throws -> SteamLibrarySnapshot {
         var libraries = [steamRoot.standardizedFileURL.resolvingSymlinksInPath()]
         var issues: [SteamScanIssue] = []
+        var games: [SteamInstalledGame] = []
         let foldersFile = steamRoot.appending(path: "steamapps/libraryfolders.vdf")
         guard FileManager.default.fileExists(atPath: steamRoot.appending(path: "steamapps").path) else {
             throw SteamMetadataError.unavailable(steamRoot.path)
         }
         if includeAdditionalLibraries, FileManager.default.fileExists(atPath: foldersFile.path) {
             do {
-                let folders = try ValveKeyValues.read(foldersFile).object("libraryfolders")
-                for key in folders.values.keys.sorted() where UInt32(key) != nil {
-                    guard let value = folders.values[key] else { continue }
-                    let path: String
-                    switch value {
-                    case .string(let text): path = text
-                    case .object(let folder): path = try folder.string("path")
-                    }
-                    let library: URL
-                    if let prefix {
-                        let normalized = path.replacingOccurrences(of: "\\", with: "/")
-                        guard normalized.lowercased().hasPrefix("c:/") else { throw SteamMetadataError.unavailable(path) }
-                        library = try ManagedPath.child("drive_c/" + String(normalized.dropFirst(3)), under: prefix)
-                    } else {
-                        guard path.hasPrefix("/"), !path.contains("\0") else { throw SteamMetadataError.malformed }
-                        library = URL(fileURLWithPath: path)
-                    }
-                    let canonical = library.standardizedFileURL.resolvingSymlinksInPath()
-                    if !libraries.contains(canonical) { libraries.append(canonical) }
-                }
-            } catch { issues.append(SteamScanIssue(path: foldersFile.path, message: error.localizedDescription)) }
+                try addLibraries(from: foldersFile, prefix: prefix, to: &libraries)
+            } catch {
+                issues.append(SteamScanIssue(path: foldersFile.path, message: error.localizedDescription))
+            }
         }
-        var games: [SteamInstalledGame] = []
         for library in libraries {
-            let apps = library.appending(path: "steamapps")
-            do {
-                let files = try FileManager.default.contentsOfDirectory(at: apps, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-                for file in files.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) where file.lastPathComponent.hasPrefix("appmanifest_") && file.pathExtension == "acf" {
-                    do {
-                        let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-                        guard values.isRegularFile == true, values.isSymbolicLink != true else { throw SteamMetadataError.malformed }
-                        let app = try ValveKeyValues.read(file).object("appstate")
-                        guard let appID = UInt32(try app.string("appid")), appID > 0,
-                              file.lastPathComponent == "appmanifest_\(appID).acf",
-                              let flags = UInt64(try app.string("stateflags")) else { throw SteamMetadataError.malformed }
-                        let directory = try app.string("installdir")
-                        try ManagedPath.validateRelative(directory)
-                        let location = try ManagedPath.child(directory, under: apps.appending(path: "common"))
-                        games.append(SteamInstalledGame(appID: appID, name: try app.string("name"),
-                                                        buildID: try? app.string("buildid"), installDirectory: location,
-                                                        libraryURL: library, stateFlags: flags,
-                                                        platform: prefix == nil ? .nativeMacOS : .windowsWine))
-                    } catch { issues.append(SteamScanIssue(path: file.path, message: error.localizedDescription)) }
-                }
-            } catch { issues.append(SteamScanIssue(path: apps.path, message: error.localizedDescription)) }
+            scanManifests(in: library, platform: prefix == nil ? .nativeMacOS : .windowsWine,
+                          games: &games, issues: &issues)
         }
         return SteamLibrarySnapshot(games: games, issues: issues, scannedAt: Date())
+    }
+
+    private static func addLibraries(from file: URL, prefix: URL?, to libraries: inout [URL]) throws {
+        let folders = try ValveKeyValues.read(file).object("libraryfolders")
+        for key in folders.values.keys.sorted() where UInt32(key) != nil {
+            guard let value = folders.values[key] else { continue }
+            let path: String
+            switch value {
+            case .string(let text): path = text
+            case .object(let folder): path = try folder.string("path")
+            }
+            let library = try libraryURL(for: path, prefix: prefix)
+            let canonical = library.standardizedFileURL.resolvingSymlinksInPath()
+            if !libraries.contains(canonical) { libraries.append(canonical) }
+        }
+    }
+
+    private static func libraryURL(for path: String, prefix: URL?) throws -> URL {
+        if let prefix {
+            let normalized = path.replacingOccurrences(of: "\\", with: "/")
+            guard normalized.lowercased().hasPrefix("c:/") else { throw SteamMetadataError.unavailable(path) }
+            return try ManagedPath.child("drive_c/" + String(normalized.dropFirst(3)), under: prefix)
+        }
+        guard path.hasPrefix("/"), !path.contains("\0") else { throw SteamMetadataError.malformed }
+        return URL(fileURLWithPath: path)
+    }
+
+    private static func scanManifests(
+        in library: URL, platform: SteamPlatform, games: inout [SteamInstalledGame], issues: inout [SteamScanIssue]
+    ) {
+        let apps = library.appending(path: "steamapps")
+        do {
+            let files = try FileManager.default.contentsOfDirectory(
+                at: apps, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey]
+            )
+            let sorted = files.sorted { $0.lastPathComponent < $1.lastPathComponent }
+            for file in sorted where file.lastPathComponent.hasPrefix("appmanifest_") && file.pathExtension == "acf" {
+                do {
+                    games.append(try readManifest(file, library: library, platform: platform))
+                } catch {
+                    issues.append(SteamScanIssue(path: file.path, message: error.localizedDescription))
+                }
+            }
+        } catch {
+            issues.append(SteamScanIssue(path: apps.path, message: error.localizedDescription))
+        }
+    }
+
+    private static func readManifest(_ file: URL, library: URL, platform: SteamPlatform) throws -> SteamInstalledGame {
+        let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+        guard values.isRegularFile == true, values.isSymbolicLink != true else { throw SteamMetadataError.malformed }
+        let app = try ValveKeyValues.read(file).object("appstate")
+        guard let appID = UInt32(try app.string("appid")), appID > 0,
+              file.lastPathComponent == "appmanifest_\(appID).acf",
+              let flags = UInt64(try app.string("stateflags")) else {
+            throw SteamMetadataError.malformed
+        }
+        let directory = try app.string("installdir")
+        let location = try ManagedPath.child(directory, under: library.appending(path: "steamapps/common"))
+        return SteamInstalledGame(
+            appID: appID, name: try app.string("name"), buildID: try? app.string("buildid"),
+            installDirectory: location, libraryURL: library, stateFlags: flags, platform: platform
+        )
     }
 }
