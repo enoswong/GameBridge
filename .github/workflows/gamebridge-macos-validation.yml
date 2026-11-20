@@ -1,4 +1,4 @@
-name: GameBridge legacy coverage
+name: GameBridge automatic file repair
 on:
   push:
     branches: [codex/gamebridge-macos-validation]
@@ -12,5 +12,38 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Confirm missing game files can reach the repair flow
-        run: swift test --package-path WhiskyKit --filter SteamLibraryTests.testManagedPlayLibraryKeepsDamagedGamesVisibleForRepair
+      - name: Test WhiskyKit
+        run: swift test --package-path WhiskyKit
+      - name: Build GameBridge
+        run: >-
+          xcodebuild -project Whisky.xcodeproj -scheme Whisky -configuration Debug
+          -destination 'platform=macOS,arch=arm64' -derivedDataPath build/local
+          CODE_SIGNING_ALLOWED=NO GAMEBRIDGE_SKIP_LINT=YES build
+      - name: Check that both legacy commands are discoverable
+        run: |
+          cli=build/local/Build/Products/Debug/GameBridge.app/Contents/Resources/WhiskyCmd
+          help="$("$cli" runtime --help)"
+          missing=0
+          for command in audit-legacy prepare-legacy; do
+            if ! grep -q "$command" <<< "$help"; then
+              echo "Missing runtime command: $command"
+              missing=1
+            fi
+          done
+          exit "$missing"
+      - name: Audit a standalone Windows game folder
+        run: |
+          cli=build/local/Build/Products/Debug/GameBridge.app/Contents/Resources/WhiskyCmd
+          folder="$(mktemp -d)"
+          printf 'MZ' > "$folder/broken.exe"
+          "$cli" runtime audit-legacy --standalone-only --game-directory "$folder" > "$folder/report.json"
+          python3 -c 'import json, sys; report=json.load(open(sys.argv[1])); assert len(report["reports"]) == 1 and len(report["reports"][0]["unreadableExecutables"]) == 1 and not report["issues"], report' "$folder/report.json"
+      - name: Verify the managed repair entry points
+        run: |
+          cli=build/local/Build/Products/Debug/GameBridge.app/Contents/Resources/WhiskyCmd
+          "$cli" runtime launch --help | grep -q -- --verify-files
+          "$cli" runtime audit-legacy --help | grep -q -- --repair
+          if "$cli" runtime launch --environment fixture --verify-files 2>error.txt; then
+            exit 1
+          fi
+          grep -q -- '--verify-files requires --app-id' error.txt

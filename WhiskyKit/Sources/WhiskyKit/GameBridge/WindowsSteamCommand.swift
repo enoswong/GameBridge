@@ -4,15 +4,18 @@ import Foundation
 public struct WindowsSteamCommand: Sendable {
     public let arguments: [String]
     public let environment: [String: String]
-    public init(prefix: URL, steamRelativePath: String, appID: UInt32?) throws {
+    public init(prefix: URL, steamRelativePath: String, appID: UInt32?, verifyFiles: Bool = false) throws {
         let executable = try ManagedPath.child(steamRelativePath, under: prefix)
         guard executable.lastPathComponent.lowercased() == "steam.exe" else {
             throw SteamMetadataError.notWindowsExecutable }
         try Self.validatePE(executable)
-        if let appID, appID == 0 { throw SteamMetadataError.malformed }
+        guard appID != 0, !verifyFiles || appID != nil else { throw SteamMetadataError.malformed }
+        let action = appID.map { id in
+            verifyFiles ? ["steam://validate/\(id)"] : ["-applaunch", String(id)]
+        } ?? []
         // CEF's D3D11 window surfaces can fail under Wine/DXMT independently of
         // game rendering. Keep Steam's browser UI on its software renderer.
-        arguments = [executable.path, "-cef-disable-gpu"] + (appID.map { ["-applaunch", String($0)] } ?? [])
+        arguments = [executable.path, "-cef-disable-gpu"] + action
         environment = ["WINEPREFIX": prefix.path, "WINEDEBUG": "fixme-all"]
     }
     /// Fixed diagnostic desktop; no persisted game settings or registry changes.

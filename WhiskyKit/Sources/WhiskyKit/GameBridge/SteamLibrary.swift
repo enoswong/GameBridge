@@ -12,6 +12,17 @@ public struct SteamInstalledGame: Codable, Sendable, Identifiable {
     public let stateFlags: UInt64
     public let platform: SteamPlatform
     public var isFullyInstalled: Bool { stateFlags == 4 }
+    // Steam's app manifest flags for files missing (32) and files corrupt (128).
+    private var hasDamageFlag: Bool { stateFlags & (32 | 128) != 0 }
+    var isInstalledOrDamaged: Bool { isFullyInstalled || hasDamageFlag }
+    public var filesNeedVerification: Bool {
+        if hasDamageFlag { return true }
+        var isDirectory: ObjCBool = false
+        let manager = FileManager.default
+        guard manager.fileExists(atPath: installDirectory.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else { return true }
+        return (try? manager.contentsOfDirectory(atPath: installDirectory.path).isEmpty) == true
+    }
 }
 public struct SteamScanIssue: Codable, Sendable {
     public let path: String
@@ -30,20 +41,14 @@ public enum SteamLibraryScanner {
         try WindowsSteamCommand.validatePE(steamRoot.appending(path: "Steam.exe"))
         return try scan(steamRoot: steamRoot, prefix: prefix)
     }
-    /// The player view only starts games in the managed Steam installation's default library.
+    /// The player view includes repairable games in the managed Steam installation’s default library.
     public static func scanLaunchableWindows(prefix: URL, steamRelativePath: String) throws -> [SteamInstalledGame] {
         let command = try WindowsSteamCommand(prefix: prefix, steamRelativePath: steamRelativePath, appID: nil)
         let steamRoot = URL(fileURLWithPath: command.arguments[0]).deletingLastPathComponent()
         let apps = try ManagedPath.child("steamapps", under: steamRoot)
         guard FileManager.default.fileExists(atPath: apps.path) else { return [] }
         return try scan(steamRoot: steamRoot, prefix: prefix, includeAdditionalLibraries: false).games
-            .filter { game in
-                // Steamworks Common Redistributables is an installed Steam tool.
-                guard game.isFullyInstalled, game.appID != 228980 else { return false }
-                var isDirectory: ObjCBool = false
-                return FileManager.default.fileExists(atPath: game.installDirectory.path, isDirectory: &isDirectory)
-                    && isDirectory.boolValue
-            }
+            .filter { $0.isInstalledOrDamaged && $0.appID != 228980 }
             .sorted { lhs, rhs in
                 let order = lhs.name.localizedStandardCompare(rhs.name)
                 return order == .orderedSame ? lhs.appID < rhs.appID : order == .orderedAscending

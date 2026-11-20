@@ -17,7 +17,9 @@ struct LegacyGameControls: View {
                 audit(["--environment", environment.id])
             }
             .disabled(environment?.steamRelativePath == nil)
-            Button("檢查獨立 Windows 遊戲資料夾…") { selectDirectory() }
+            Button(canPrepare ? "檢查並補齊 Windows 遊戲資料夾…" : "檢查 Windows 遊戲資料夾…") {
+                selectDirectory()
+            }
             Button("預先補齊 Visual C++…") { requestSetup(reinstall: false) }
                 .disabled(!canPrepare)
             Button("重新安裝 Visual C++…") { requestSetup(reinstall: true) }
@@ -68,7 +70,8 @@ struct LegacyGameControls: View {
         panel.allowsMultipleSelection = false
         if panel.runModal() == .OK, let folder = panel.url {
             let options = environment.map { ["--environment", $0.id] } ?? []
-            audit(options + ["--standalone-only", "--game-directory", folder.path])
+            let repair = canPrepare ? ["--repair"] : []
+            audit(options + repair + ["--standalone-only", "--game-directory", folder.path])
         }
     }
 
