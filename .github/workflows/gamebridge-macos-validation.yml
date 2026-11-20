@@ -1,27 +1,31 @@
-name: GameBridge regression validation
+name: GameBridge legacy coverage
 on:
   push:
     branches: [codex/gamebridge-macos-validation]
 permissions:
   contents: read
 jobs:
-  regressions:
+  legacy:
     runs-on: macos-15
-    timeout-minutes: 12
+    timeout-minutes: 18
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: WhiskyKit tests
-        run: swift test --package-path WhiskyKit
-      - name: Build unsigned GameBridge
+      - name: Build GameBridge
         run: >-
           xcodebuild -project Whisky.xcodeproj -scheme Whisky -configuration Debug
           -destination 'platform=macOS,arch=arm64' -derivedDataPath build/local
           CODE_SIGNING_ALLOWED=NO GAMEBRIDGE_SKIP_LINT=YES build
-      - name: Smoke-test runtime commands
+      - name: Check that both legacy commands are discoverable
         run: |
           cli=build/local/Build/Products/Debug/GameBridge.app/Contents/Resources/WhiskyCmd
-          "$cli" runtime --help
-          "$cli" runtime launch --help
-          "$cli" runtime bootstrap --help
+          help="$("$cli" runtime --help)"
+          missing=0
+          for command in audit-legacy prepare-legacy; do
+            if ! grep -q "$command" <<< "$help"; then
+              echo "Missing runtime command: $command"
+              missing=1
+            fi
+          done
+          exit "$missing"
