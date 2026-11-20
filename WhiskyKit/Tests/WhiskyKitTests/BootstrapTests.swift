@@ -68,12 +68,17 @@ final class BootstrapTests: XCTestCase {
         try Data(repeating: 0x41, count: 64).write(to: target)
 
         let temporary = root.appending(path: "test-download")
-        let result = try await item.obtain(cache: root, log: { _ in }) { url in
-            XCTAssertEqual(url, source)
-            try bytes.write(to: temporary)
-            let response = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil))
-            return (temporary, response)
-        }
+        let result = try await item.obtain(
+            cache: root, log: { _ in },
+            download: { url in
+                XCTAssertEqual(url, source)
+                try bytes.write(to: temporary)
+                let response = try XCTUnwrap(
+                    HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)
+                )
+                return (temporary, response)
+            }
+        )
 
         XCTAssertEqual(result.path, target.path)
         XCTAssertEqual(try Data(contentsOf: target), bytes)
