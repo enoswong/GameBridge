@@ -41,6 +41,7 @@
 		6E6C0CF82A419A8C00356232 /* WhiskyWineInstallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E6C0CF72A419A8C00356232 /* WhiskyWineInstallView.swift */; };
 		6E70A49B2A9A2197007799E9 /* Main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E70A49A2A9A2197007799E9 /* Main.swift */; };
 		E20000000000000000000002 /* RuntimeCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000001 /* RuntimeCommands.swift */; };
+		E20000000000000000000006 /* LegacyCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000005 /* LegacyCommands.swift */; };
 		6E70A4A12A9A280C007799E9 /* WhiskyCmd.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E70A4A02A9A280C007799E9 /* WhiskyCmd.swift */; };
 		6E7C07BE2AAE7B0100F6E66B /* ProgramShortcut.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E7C07BD2AAE7B0100F6E66B /* ProgramShortcut.swift */; };
 		6E7C07C02AAF570100F6E66B /* FileOpenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E7C07BF2AAF570100F6E66B /* FileOpenView.swift */; };
@@ -50,6 +51,7 @@
 		6EB58AC92AEACE5E00B1ED3F /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 6EB58AC82AEACE5E00B1ED3F /* Localizable.xcstrings */; };
 		6EF557982A410599001A4F09 /* SetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EF557972A410599001A4F09 /* SetupView.swift */; };
 		E20000000000000000000004 /* SetupView+Runtime.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000003 /* SetupView+Runtime.swift */; };
+		E20000000000000000000008 /* LegacyGameControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000007 /* LegacyGameControls.swift */; };
 		6EFDF64C2AAE2DA800EF622F /* QuickLookThumbnailing.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6EFDF64B2AAE2DA800EF622F /* QuickLookThumbnailing.framework */; };
 		6EFDF64E2AAE2DA800EF622F /* Quartz.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6EFDF64D2AAE2DA800EF622F /* Quartz.framework */; };
 		6EFDF6512AAE2DA800EF622F /* ThumbnailProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EFDF6502AAE2DA800EF622F /* ThumbnailProvider.swift */; };
@@ -146,6 +148,7 @@
 		6E70A4982A9A2197007799E9 /* WhiskyCmd */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = WhiskyCmd; sourceTree = BUILT_PRODUCTS_DIR; };
 		6E70A49A2A9A2197007799E9 /* Main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Main.swift; sourceTree = "<group>"; };
 		E20000000000000000000001 /* RuntimeCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeCommands.swift; sourceTree = "<group>"; };
+		E20000000000000000000005 /* LegacyCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyCommands.swift; sourceTree = "<group>"; };
 		6E70A4A02A9A280C007799E9 /* WhiskyCmd.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhiskyCmd.swift; sourceTree = "<group>"; };
 		6E7C07BD2AAE7B0100F6E66B /* ProgramShortcut.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramShortcut.swift; sourceTree = "<group>"; };
 		6E7C07BF2AAF570100F6E66B /* FileOpenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileOpenView.swift; sourceTree = "<group>"; };
@@ -153,6 +156,7 @@
 		6EB58AC82AEACE5E00B1ED3F /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		6EF557972A410599001A4F09 /* SetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupView.swift; sourceTree = "<group>"; };
 		E20000000000000000000003 /* SetupView+Runtime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SetupView+Runtime.swift"; sourceTree = "<group>"; };
+		E20000000000000000000007 /* LegacyGameControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyGameControls.swift; sourceTree = "<group>"; };
 		6EFDF64A2AAE2DA800EF622F /* WhiskyThumbnail.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WhiskyThumbnail.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		6EFDF64B2AAE2DA800EF622F /* QuickLookThumbnailing.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuickLookThumbnailing.framework; path = System/Library/Frameworks/QuickLookThumbnailing.framework; sourceTree = SDKROOT; };
 		6EFDF64D2AAE2DA800EF622F /* Quartz.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Quartz.framework; path = System/Library/Frameworks/Quartz.framework; sourceTree = SDKROOT; };
@@ -372,6 +376,7 @@
 			children = (
 				6EF557972A410599001A4F09 /* SetupView.swift */,
 				E20000000000000000000003 /* SetupView+Runtime.swift */,
+				E20000000000000000000007 /* LegacyGameControls.swift */,
 				6E6C0CF12A419A6800356232 /* WelcomeView.swift */,
 				6E6C0CF32A419A7600356232 /* RosettaView.swift */,
 				6E6C0CF52A419A8300356232 /* WhiskyWineDownloadView.swift */,
@@ -385,6 +390,7 @@
 			children = (
 				6E70A49A2A9A2197007799E9 /* Main.swift */,
 				E20000000000000000000001 /* RuntimeCommands.swift */,
+				E20000000000000000000005 /* LegacyCommands.swift */,
 			);
 			path = WhiskyCmd;
 			sourceTree = "<group>";
@@ -614,6 +620,7 @@
 				67D278512BC5907E006F9A1E /* ActionView.swift in Sources */,
 				6EF557982A410599001A4F09 /* SetupView.swift in Sources */,
 				E20000000000000000000004 /* SetupView+Runtime.swift in Sources */,
+				E20000000000000000000008 /* LegacyGameControls.swift in Sources */,
 				6E355E5A29D782B2002D83BE /* ProgramsView.swift in Sources */,
 				DB696FC82AFAE5DA0037EB2F /* PinCreationView.swift in Sources */,
 				6E7C07BE2AAE7B0100F6E66B /* ProgramShortcut.swift in Sources */,
@@ -651,6 +658,7 @@
 			files = (
 				6E70A49B2A9A2197007799E9 /* Main.swift in Sources */,
 				E20000000000000000000002 /* RuntimeCommands.swift in Sources */,
+				E20000000000000000000006 /* LegacyCommands.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

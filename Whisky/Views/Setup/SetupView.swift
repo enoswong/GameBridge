@@ -61,6 +61,11 @@ struct SetupView: View {
             Text("Windows 遊戲").font(.title2.bold())
             playerControls
                 .disabled(busy)
+            LegacyGameControls(environment: selection) { arguments in
+                let succeeded = await run(arguments)
+                return succeeded ? log : nil
+            }
+            .disabled(busy || !loaded)
             if busy {
                 HStack {
                     ProgressView().controlSize(.small)

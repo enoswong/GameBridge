@@ -12,6 +12,8 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+      - name: Test WhiskyKit
+        run: swift test --package-path WhiskyKit
       - name: Build GameBridge
         run: >-
           xcodebuild -project Whisky.xcodeproj -scheme Whisky -configuration Debug
@@ -29,3 +31,10 @@ jobs:
             fi
           done
           exit "$missing"
+      - name: Audit a standalone Windows game folder
+        run: |
+          cli=build/local/Build/Products/Debug/GameBridge.app/Contents/Resources/WhiskyCmd
+          folder="$(mktemp -d)"
+          printf 'MZ' > "$folder/broken.exe"
+          "$cli" runtime audit-legacy --standalone-only --game-directory "$folder" > "$folder/report.json"
+          python3 -c 'import json, sys; report=json.load(open(sys.argv[1])); assert len(report["reports"]) == 1 and len(report["reports"][0]["unreadableExecutables"]) == 1 and not report["issues"], report' "$folder/report.json"

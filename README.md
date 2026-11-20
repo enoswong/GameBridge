@@ -118,6 +118,16 @@ Microsoft 元件與 Steam 安裝程式會從官方來源下載並檢查雜湊值
 
 更新 GameBridge、移除環境或恢復狀態前，也應先完成上述退出流程。建議保留正常的 GameBridge → Windows Steam → 遊戲啟動方式，讓適用的相容性設定一併載入。
 
+### 舊遊戲檔案與元件
+
+在 GameBridge 主畫面開啟 **「舊遊戲檔案與元件」**，可檢查已安裝的 Windows Steam 遊戲，或選擇獨立 Windows 遊戲資料夾。報告列出 x86／x64 EXE 和 DLL 宣告的共用依賴，以及在執行檔旁邊或對應 Wine 系統目錄未找到的匯入項目。每個遊戲目錄最多檢查 2,048 個二進位檔，可單獨選擇子目錄再查。執行時才載入的檔案、遊戲資料與原裝檔案的完整性由遊戲發行來源核對。
+
+如要補上舊版 Visual C++，先退出遊戲與 Steam，再按 **「預先補齊 Visual C++」**。GameBridge 在所選環境內執行 Microsoft 提供的 2005、2008、2010、2012、2013 x86／x64 安裝器，逐個驗證 SHA-256 並記錄已完成的安裝。請在各安裝器視窗閱讀授權條款並完成安裝。需要重裝時按 **「重新安裝 Visual C++」**。Visual C++ v14 和 DirectX June 2010 由現有設定或修復流程處理。
+
+Steam 遊戲原裝檔案缺失時，從遊戲的 **內容 → 已安裝檔案** 執行[驗證遊戲檔案的完整性](https://help.steampowered.com/en/faqs/view/0C48-FCBD-DA71-93EB)。獨立 Windows 遊戲可用原本的安裝程式、發行商補丁或商店的修復功能。
+
+命令列可用 `runtime audit-legacy --environment <ID>` 掃描 Steam 遊戲，或用 `--game-directory <路徑>` 指定獨立遊戲目錄。用 `runtime prepare-legacy --environment <ID>` 安裝舊版 Visual C++，有需要時可加 `--reinstall`。
+
 ## 容器管理與資料位置
 
 「Windows 環境」亦稱容器或 Wine prefix。**每個容器的已安裝元件與遊戲是獨立的**；在 A 容器安裝 DLL，不會自動套用至 B 容器。
