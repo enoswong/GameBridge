@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+import Darwin
 import Foundation
 
 struct BootstrapInstaller: Codable, Sendable {
@@ -20,12 +21,26 @@ struct BootstrapInstaller: Codable, Sendable {
     }
     static func matches(_ file: URL, digest: String, maximumBytes: UInt64) throws -> Bool {
         guard FileManager.default.fileExists(atPath: file.path) else { return false }
-        let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+        let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
         guard values.isRegularFile == true, values.isSymbolicLink != true else {
-            throw RuntimeError.unsafePath(file.path) }
-        return try DigestTools.sha256(file: file, maximumBytes: maximumBytes).hash == digest
+            throw RuntimeError.unsafePath(file.path)
+        }
+        if let size = values.fileSize, let bytes = UInt64(exactly: size), bytes > maximumBytes {
+            return false
+        }
+        do {
+            return try DigestTools.sha256(file: file, maximumBytes: maximumBytes).hash == digest
+        } catch RuntimeError.invalidArchive("size limit") {
+            return false
+        }
     }
-    func obtain(cache: URL, log: @escaping @Sendable (String) -> Void) async throws -> URL {
+
+    func obtain(
+        cache: URL, log: @escaping @Sendable (String) -> Void,
+        download: @Sendable (URL) async throws -> (URL, URLResponse) = {
+            try await URLSession.shared.download(from: $0)
+        }
+    ) async throws -> URL {
         try validate()
         let directory = try ManagedPath.child(sha256, under: cache)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -33,15 +48,20 @@ struct BootstrapInstaller: Codable, Sendable {
         if try Self.matches(target, digest: sha256, maximumBytes: maximumBytes) { return target }
         log("下載官方元件：\(fileName)\n")
         guard let source = URL(string: url) else { throw RuntimeError.invalidManifest("bootstrap installer URL") }
-        let (temporary, response) = try await URLSession.shared.download(from: source)
+        let (temporary, response) = try await download(source)
         defer { try? FileManager.default.removeItem(at: temporary) }
         guard let http = response as? HTTPURLResponse, http.statusCode == 200,
               response.url?.scheme == "https",
-              try Self.matches(
-                  temporary, digest: sha256, maximumBytes: maximumBytes) else { throw RuntimeError.archiveHashMismatch }
-        // Verified complete file only; interrupted downloads never become cache entries.
-        if FileManager.default.fileExists(atPath: target.path) { try FileManager.default.removeItem(at: target) }
-        try FileManager.default.copyItem(at: temporary, to: target)
+              try Self.matches(temporary, digest: sha256, maximumBytes: maximumBytes) else {
+            throw RuntimeError.archiveHashMismatch
+        }
+        // Stage on the cache volume so a failed copy cannot leave a partial entry.
+        let staged = try ManagedPath.child(".installer-\(UUID().uuidString)", under: directory)
+        defer { try? FileManager.default.removeItem(at: staged) }
+        try FileManager.default.copyItem(at: temporary, to: staged)
+        guard rename(staged.path, target.path) == 0 else {
+            throw RuntimeError.io("publish installer cache (POSIX \(errno))")
+        }
         return target
     }
 }

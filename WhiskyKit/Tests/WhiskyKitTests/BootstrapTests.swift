@@ -41,4 +41,47 @@ final class BootstrapTests: XCTestCase {
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: path)
         XCTAssertThrowsError(try BootstrapInstaller.matches(link, digest: DigestTools.sha256(bytes), maximumBytes: 100))
     }
+
+    func testOversizedCacheEntryIsTreatedAsUnusable() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let path = root.appending(path: "SteamSetup.exe")
+        let bytes = Data(repeating: 0x41, count: 32)
+        try bytes.write(to: path)
+
+        let matches = try BootstrapInstaller.matches(path, digest: DigestTools.sha256(bytes), maximumBytes: 16)
+        XCTAssertFalse(matches)
+    }
+
+    func testRetryReplacesOversizedCacheWithVerifiedDownload() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bytes = Data("verified installer".utf8)
+        let source = try XCTUnwrap(URL(string: "https://cdn.akamai.steamstatic.com/client/installer/SteamSetup.exe"))
+        let item = BootstrapInstaller(
+            id: "steam", fileName: "SteamSetup.exe", url: source.absoluteString,
+            sha256: DigestTools.sha256(bytes), maximumBytes: 32
+        )
+        let directory = root.appending(path: item.sha256)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let target = directory.appending(path: item.fileName)
+        try Data(repeating: 0x41, count: 64).write(to: target)
+
+        let temporary = root.appending(path: "test-download")
+        let result = try await item.obtain(
+            cache: root, log: { _ in },
+            download: { url in
+                XCTAssertEqual(url, source)
+                try bytes.write(to: temporary)
+                let response = try XCTUnwrap(
+                    HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)
+                )
+                return (temporary, response)
+            }
+        )
+
+        XCTAssertEqual(result.path, target.path)
+        XCTAssertEqual(try Data(contentsOf: target), bytes)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path), [item.fileName])
+    }
 }

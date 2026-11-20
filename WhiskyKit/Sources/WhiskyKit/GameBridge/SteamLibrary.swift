@@ -61,7 +61,7 @@ public enum SteamLibraryScanner {
         }
         if includeAdditionalLibraries, FileManager.default.fileExists(atPath: foldersFile.path) {
             do {
-                try addLibraries(from: foldersFile, prefix: prefix, to: &libraries)
+                try addLibraries(from: foldersFile, prefix: prefix, to: &libraries, issues: &issues)
             } catch {
                 issues.append(SteamScanIssue(path: foldersFile.path, message: error.localizedDescription))
             }
@@ -73,18 +73,24 @@ public enum SteamLibraryScanner {
         return SteamLibrarySnapshot(games: games, issues: issues, scannedAt: Date())
     }
 
-    private static func addLibraries(from file: URL, prefix: URL?, to libraries: inout [URL]) throws {
+    private static func addLibraries(
+        from file: URL, prefix: URL?, to libraries: inout [URL], issues: inout [SteamScanIssue]
+    ) throws {
         let folders = try ValveKeyValues.read(file).object("libraryfolders")
         for key in folders.values.keys.sorted() where UInt32(key) != nil {
             guard let value = folders.values[key] else { continue }
-            let path: String
-            switch value {
-            case .string(let text): path = text
-            case .object(let folder): path = try folder.string("path")
+            do {
+                let path: String
+                switch value {
+                case .string(let text): path = text
+                case .object(let folder): path = try folder.string("path")
+                }
+                let library = try libraryURL(for: path, prefix: prefix)
+                let canonical = library.standardizedFileURL.resolvingSymlinksInPath()
+                if !libraries.contains(canonical) { libraries.append(canonical) }
+            } catch {
+                issues.append(SteamScanIssue(path: file.path, message: error.localizedDescription))
             }
-            let library = try libraryURL(for: path, prefix: prefix)
-            let canonical = library.standardizedFileURL.resolvingSymlinksInPath()
-            if !libraries.contains(canonical) { libraries.append(canonical) }
         }
     }
 
