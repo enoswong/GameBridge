@@ -38,7 +38,8 @@ public enum SteamLibraryScanner {
         guard FileManager.default.fileExists(atPath: apps.path) else { return [] }
         return try scan(steamRoot: steamRoot, prefix: prefix, includeAdditionalLibraries: false).games
             .filter { game in
-                guard game.isFullyInstalled, game.appID != 228980 else { return false } // Steamworks Common Redistributables
+                // Steamworks Common Redistributables is an installed Steam tool.
+                guard game.isFullyInstalled, game.appID != 228980 else { return false }
                 var isDirectory: ObjCBool = false
                 return FileManager.default.fileExists(atPath: game.installDirectory.path, isDirectory: &isDirectory)
                     && isDirectory.boolValue
@@ -48,7 +49,9 @@ public enum SteamLibraryScanner {
                 return order == .orderedSame ? lhs.appID < rhs.appID : order == .orderedAscending
             }
     }
-    private static func scan(steamRoot: URL, prefix: URL?, includeAdditionalLibraries: Bool = true) throws -> SteamLibrarySnapshot {
+    private static func scan(
+        steamRoot: URL, prefix: URL?, includeAdditionalLibraries: Bool = true
+    ) throws -> SteamLibrarySnapshot {
         var libraries = [steamRoot.standardizedFileURL.resolvingSymlinksInPath()]
         var issues: [SteamScanIssue] = []
         let foldersFile = steamRoot.appending(path: "steamapps/libraryfolders.vdf")

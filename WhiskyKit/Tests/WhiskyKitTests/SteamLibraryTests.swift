@@ -70,7 +70,8 @@ final class SteamLibraryTests: XCTestCase {
         ] {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             if installed {
-                try FileManager.default.createDirectory(at: directory.appending(path: "common/\(name)"), withIntermediateDirectories: true)
+                let gameDirectory = directory.appending(path: "common/\(name)")
+                try FileManager.default.createDirectory(at: gameDirectory, withIntermediateDirectories: true)
             }
             try """
             "AppState" { "appid" "\(appID)" "name" "\(name)" "installdir" "\(name)" "StateFlags" "\(flags)" }
@@ -100,10 +101,7 @@ final class SteamLibraryTests: XCTestCase {
         try FileManager.default.createDirectory(at: steam.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("native-MachO-not-Windows".utf8).write(to: steam)
         XCTAssertThrowsError(try WindowsSteamCommand(prefix: root, steamRelativePath: "drive_c/Program Files (x86)/Steam/Steam.exe", appID: 480))
-        var pe = Data(repeating: 0, count: 128)
-        pe[0] = 0x4d; pe[1] = 0x5a; pe[0x3c] = 64
-        pe[64] = 0x50; pe[65] = 0x45; pe[68] = 0x4c; pe[69] = 0x01
-        try pe.write(to: steam)
+        try writeWindowsSteam(to: steam)
         let command = try WindowsSteamCommand(prefix: root, steamRelativePath: "drive_c/Program Files (x86)/Steam/Steam.exe", appID: 480)
         XCTAssertEqual(command.arguments, [steam.path, "-cef-disable-gpu", "-applaunch", "480"])
         let library = try WindowsSteamCommand(prefix: root, steamRelativePath: "drive_c/Program Files (x86)/Steam/Steam.exe", appID: nil)

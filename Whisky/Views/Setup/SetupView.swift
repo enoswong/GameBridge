@@ -117,7 +117,9 @@ struct SetupView: View {
         }
         .confirmationDialog("移除「\(selection?.name ?? "")」？", isPresented: $showRemoveConfirmation) {
             Button("移除環境", role: .destructive) {
-                if let selected = selection { Task { await run(["archive-environment", "--environment", selected.id]) } }
+                if let selected = selection {
+                    Task { await run(["archive-environment", "--environment", selected.id]) }
+                }
             }
         } message: {
             Text("環境會從使用清單移除，遊戲安裝與存檔會保留。你可在「已移除的環境」恢復。")
@@ -360,9 +362,12 @@ struct SetupView: View {
             }
             if loadFailed { message = "" }
             loadFailed = false
-            if let environment = selection, let steamPath = environment.steamRelativePath, environment.status == .ready {
+            if let environment = selection, environment.status == .ready,
+               let steamPath = environment.steamRelativePath {
                 let games = await Task.detached(priority: .utility) {
-                    try? SteamLibraryScanner.scanLaunchableWindows(prefix: environment.prefix, steamRelativePath: steamPath)
+                    try? SteamLibraryScanner.scanLaunchableWindows(
+                        prefix: environment.prefix, steamRelativePath: steamPath
+                    )
                 }.value
                 if !Task.isCancelled, selection?.id == environment.id {
                     libraryEnvironment = environment.id
