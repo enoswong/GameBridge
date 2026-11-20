@@ -74,11 +74,7 @@ public actor EngineStore {
             try syncDirectoryTree(payload)
             try FileManager.default.moveItem(at: payload, to: destination)
             try syncDirectory(stage)
-            let directoryFD = open(destination.deletingLastPathComponent().path, O_RDONLY | O_CLOEXEC)
-            guard directoryFD >= 0 else { throw RuntimeError.io("open engine directory") }
-            let syncResult = fsync(directoryFD)
-            close(directoryFD)
-            guard syncResult == 0 else { throw RuntimeError.io("sync engine directory") }
+            try syncPublishedEngineParent(destination.deletingLastPathComponent())
             let installed = InstalledEngine(
                 manifest: manifest, directory: destination, catalogRevision: verified.catalog.revision)
             try registry.put(installed, key: "engine:" + engineID)
@@ -121,6 +117,14 @@ public actor EngineStore {
                 InstallationJournal.self, key: key), item.stage != "committed" else { return nil }
             return item.id
         }
+    }
+
+    private func syncPublishedEngineParent(_ directory: URL) throws {
+        let directoryFD = open(directory.path, O_RDONLY | O_CLOEXEC)
+        guard directoryFD >= 0 else { throw RuntimeError.io("open engine directory") }
+        let syncResult = fsync(directoryFD)
+        close(directoryFD)
+        guard syncResult == 0 else { throw RuntimeError.io("sync engine directory") }
     }
 
     private func syncDirectoryTree(_ root: URL) throws {

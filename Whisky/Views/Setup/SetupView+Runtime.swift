@@ -119,12 +119,7 @@ extension SetupView {
                     let line = Data(standardOutput[..<newline].utf8)
                     standardOutput.removeSubrange(...newline)
                     if command == "bootstrap" {
-                        if let stages = try? decoder.decode([String: BootstrapStage].self, from: line),
-                           let stage = stages["bootstrapStage"] {
-                            bootstrapStage = stage
-                        } else if let environment = try? decoder.decode(RuntimeEnvironment.self, from: line) {
-                            preparedEnvironment = environment.id
-                        }
+                        preparedEnvironment = readBootstrapEvent(line, decoder: decoder) ?? preparedEnvironment
                     } else if let control = try? decoder.decode(RunnerControlEvent.self, from: line),
                               control.kind == "clientStarted" {
                         // The helper keeps its lease until Steam and Wine exit.
@@ -137,6 +132,15 @@ extension SetupView {
             }
         }
         return (status, preparedEnvironment)
+    }
+
+    private func readBootstrapEvent(_ line: Data, decoder: JSONDecoder) -> String? {
+        if let stages = try? decoder.decode([String: BootstrapStage].self, from: line),
+           let stage = stages["bootstrapStage"] {
+            bootstrapStage = stage
+            return nil
+        }
+        return (try? decoder.decode(RuntimeEnvironment.self, from: line))?.id
     }
 
     private func reportFailure(_ arguments: [String]) {

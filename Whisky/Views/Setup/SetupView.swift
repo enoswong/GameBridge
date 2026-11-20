@@ -218,6 +218,32 @@ struct SetupView: View {
         .buttonStyle(.borderedProminent)
     }
 
+    private func termsText(_ payload: URL) -> String? {
+        let terms = ["microsoft-vc14-en.txt", "microsoft-directx-june2010-en.txt"].compactMap {
+            try? String(contentsOf: payload.appendingPathComponent("Terms/" + $0), encoding: .utf8)
+        }
+        guard terms.count == 2, terms.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
+            return nil
+        }
+        return terms.joined(separator: "\n\n────────────\n\n")
+    }
+
+    private func stageText(_ stage: BootstrapStage) -> String {
+        switch stage {
+        case .checkingRequirements: return "正在檢查安裝需求…"
+        case .preparingEnvironment: return "正在準備 Windows 遊戲環境…"
+        case .installingComponents: return "正在安裝遊戲所需的元件…"
+        case .installingSteam: return "正在安裝 Steam…"
+        case .finishing: return "正在完成相容性設定…"
+        }
+    }
+
+    private func startBootstrap() {
+        Task { await run(["bootstrap", "--accept-component-licenses", "--show-progress"]) }
+    }
+}
+
+extension SetupView {
     @ViewBuilder
     private var advancedControls: some View {
         if engines.isEmpty {
@@ -324,30 +350,6 @@ struct SetupView: View {
             installerDirectory = installer.deletingLastPathComponent().path
             Task { await run(["install-steam", "--environment", environmentID, "--installer", installer.path]) }
         }
-    }
-
-    private func termsText(_ payload: URL) -> String? {
-        let terms = ["microsoft-vc14-en.txt", "microsoft-directx-june2010-en.txt"].compactMap {
-            try? String(contentsOf: payload.appendingPathComponent("Terms/" + $0), encoding: .utf8)
-        }
-        guard terms.count == 2, terms.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
-            return nil
-        }
-        return terms.joined(separator: "\n\n────────────\n\n")
-    }
-
-    private func stageText(_ stage: BootstrapStage) -> String {
-        switch stage {
-        case .checkingRequirements: return "正在檢查安裝需求…"
-        case .preparingEnvironment: return "正在準備 Windows 遊戲環境…"
-        case .installingComponents: return "正在安裝遊戲所需的元件…"
-        case .installingSteam: return "正在安裝 Steam…"
-        case .finishing: return "正在完成相容性設定…"
-        }
-    }
-
-    private func startBootstrap() {
-        Task { await run(["bootstrap", "--accept-component-licenses", "--show-progress"]) }
     }
 
     private func statusText(_ status: EnvironmentStatus) -> String {
