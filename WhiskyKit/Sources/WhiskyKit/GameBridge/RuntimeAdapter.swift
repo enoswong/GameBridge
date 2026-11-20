@@ -4,8 +4,11 @@ import Foundation
 public struct LaunchRequest: Codable, Sendable {
     public let environmentID: String
     public let appID: UInt32?
-    public init(environmentID: String, appID: UInt32? = nil) {
-        self.environmentID = environmentID; self.appID = appID
+    public let verifyFiles: Bool?
+    public init(environmentID: String, appID: UInt32? = nil, verifyFiles: Bool = false) {
+        self.environmentID = environmentID
+        self.appID = appID
+        self.verifyFiles = verifyFiles ? true : nil
     }
 }
 public struct RunnerControlEvent: Codable, Sendable {
@@ -113,7 +116,9 @@ public enum RuntimeAdapter {
         guard request.environmentID == environment.id, environment.status == .ready,
               let steamPath = environment.steamRelativePath else { throw RuntimeError.unboundEnvironment }
         let command = try WindowsSteamCommand(
-            prefix: environment.prefix, steamRelativePath: steamPath, appID: request.appID)
+            prefix: environment.prefix, steamRelativePath: steamPath, appID: request.appID,
+            verifyFiles: request.verifyFiles == true
+        )
         // Older containers predate bootstrap. Stage bundled fixes on normal launch too.
         try await confirmIdle(engine: engine, lease: lease)
         if try DeskrawlCompatibility.prepareBundled(prefix: environment.prefix, engineID: engine.manifest.id,

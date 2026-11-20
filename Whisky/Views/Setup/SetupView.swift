@@ -211,13 +211,13 @@ struct SetupView: View {
     }
 
     private func retryButton(for environment: RuntimeEnvironment) -> some View {
-        Button("修復並重試") {
+        let appID = lastLaunch?.environment == environment.id ? lastLaunch?.appID : nil
+        return Button(appID == nil ? "修復並重試" : "驗證遊戲檔案") {
             Task {
-                let appID = lastLaunch?.environment == environment.id ? lastLaunch?.appID : nil
                 if environment.status != .ready {
                     guard await run(["recover", "--environment", environment.id]) else { return }
                 }
-                await launchSteam(in: environment.id, appID: appID)
+                await launchSteam(in: environment.id, appID: appID, verifyFiles: appID != nil)
             }
         }
         .buttonStyle(.borderedProminent)

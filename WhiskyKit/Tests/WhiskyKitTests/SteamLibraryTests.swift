@@ -91,7 +91,7 @@ final class SteamLibraryTests: XCTestCase {
         XCTAssertEqual(snapshot.issues.first?.path, folders.path)
     }
 
-    func testManagedPlayLibraryListsOnlyCompleteGamesInTheDefaultLibrary() throws {
+    func testManagedPlayLibraryKeepsDamagedGamesVisibleForRepair() throws {
         let prefix = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: prefix) }
         let steamPath = "drive_c/Program Files (x86)/Steam/Steam.exe"
@@ -103,7 +103,9 @@ final class SteamLibraryTests: XCTestCase {
             (apps, 481, "Zulu", 4, true),
             (apps, 482, "Alpha", 4, true),
             (apps, 483, "Downloading", 1026, true),
-            (apps, 484, "Stale", 4, false),
+            (apps, 484, "Missing directory", 4, false),
+            (apps, 486, "Damaged", 128, true),
+            (apps, 487, "Empty folder", 4, true),
             (apps, 228980, "Steamworks Common Redistributables", 4, true),
             (otherApps, 485, "Other library", 4, true)
         ] {
@@ -111,6 +113,7 @@ final class SteamLibraryTests: XCTestCase {
             if installed {
                 let gameDirectory = directory.appending(path: "common/\(name)")
                 try FileManager.default.createDirectory(at: gameDirectory, withIntermediateDirectories: true)
+                if appID != 487 { try Data([1]).write(to: gameDirectory.appending(path: "installed-data")) }
             }
             try """
             "AppState" { "appid" "\(appID)" "name" "\(name)" "installdir" "\(name)" "StateFlags" "\(flags)" }
@@ -121,7 +124,8 @@ final class SteamLibraryTests: XCTestCase {
         )
 
         let games = try SteamLibraryScanner.scanLaunchableWindows(prefix: prefix, steamRelativePath: steamPath)
-        XCTAssertEqual(games.map(\.appID), [482, 481])
+        XCTAssertEqual(games.map(\.appID), [482, 486, 487, 484, 481])
+        XCTAssertEqual(games.filter(\.filesNeedVerification).map(\.appID), [486, 487, 484])
         XCTAssertTrue(games.allSatisfy { $0.platform == .windowsWine })
     }
 
@@ -158,6 +162,20 @@ final class SteamLibraryTests: XCTestCase {
         XCTAssertEqual(Array(desktop.suffix(2)), ["-applaunch", "480"])
 
     }
+    func testVerificationUsesTheManagedWindowsSteamExecutableAndSelectedGame() throws {
+        let prefix = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: prefix) }
+        let path = "drive_c/Steam/Steam.exe"
+        let steam = prefix.appending(path: path)
+        try writeWindowsSteam(to: steam)
+        let command = try WindowsSteamCommand(prefix: prefix, steamRelativePath: path, appID: 484, verifyFiles: true)
+        XCTAssertEqual(command.arguments, [steam.path, "-cef-disable-gpu", "steam://validate/484"])
+        XCTAssertEqual(command.environment["WINEPREFIX"], prefix.path)
+        XCTAssertThrowsError(try WindowsSteamCommand(
+            prefix: prefix, steamRelativePath: path, appID: nil, verifyFiles: true
+        ))
+    }
+
     func testClientStartAndTimeoutNeverBecomeVerifiedGamePlay() throws {
         var session = LaunchEvidence(appID: 480, startedAt: RuntimeFixture.now)
         session.clientDidStart()

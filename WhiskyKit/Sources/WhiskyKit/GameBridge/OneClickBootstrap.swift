@@ -218,7 +218,7 @@ public enum OneClickBootstrap {
     }
 }
 
-private struct BootstrapSession {
+struct BootstrapSession {
     let engine: InstalledEngine
     let lease: EnvironmentLease
     let progress: @Sendable (BootstrapStage) -> Void
@@ -250,7 +250,7 @@ private struct BootstrapSession {
         }
     }
 
-    private func install(_ id: String, at installer: URL) async throws {
+    func install(_ id: String, at installer: URL) async throws {
         switch id {
         case "directx":
             let folder = try ManagedPath.child("drive_c/GameBridge/DirectX", under: lease.environment.prefix)

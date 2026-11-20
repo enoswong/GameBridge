@@ -93,6 +93,7 @@ public struct LegacyGameAudit: Encodable, Sendable {
         var runtime = Set<Import>()
         var unresolved = Set<Import>()
         var directoryFiles: [URL: Set<String>] = [:]
+        var architectureFiles: [String: Set<String>] = [:]
 
         mutating func inspect(_ file: URL) {
             do {
@@ -118,11 +119,23 @@ public struct LegacyGameAudit: Encodable, Sendable {
         private mutating func systemNames(for architecture: String) -> Set<String> {
             guard let prefix else { return [] }
             let windows = prefix.appending(path: "drive_c/windows")
+            if let cached = architectureFiles[architecture] { return cached }
             let wow64 = windows.appending(path: "syswow64")
-            if architecture == "x86", FileManager.default.fileExists(atPath: wow64.path) {
-                return names(in: wow64)
+            let system = architecture == "x86" && FileManager.default.fileExists(atPath: wow64.path)
+                ? wow64 : windows.appending(path: "system32")
+            var available = names(in: system)
+            let assemblies = windows.appending(path: "winsxs")
+            let children = (try? FileManager.default.contentsOfDirectory(
+                at: assemblies, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey]
+            )) ?? []
+            let family = architecture == "x86" ? "x86_microsoft.vc" : "amd64_microsoft.vc"
+            for child in children where child.lastPathComponent.lowercased().hasPrefix(family) {
+                let attributes = try? child.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+                guard attributes?.isDirectory == true, attributes?.isSymbolicLink == false else { continue }
+                available.formUnion(names(in: child))
             }
-            return names(in: windows.appending(path: "system32"))
+            architectureFiles[architecture] = available
+            return available
         }
 
         private mutating func names(in directory: URL) -> Set<String> {

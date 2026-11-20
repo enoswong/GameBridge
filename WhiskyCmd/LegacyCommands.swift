@@ -21,12 +21,17 @@ extension Whisky.Runtime {
         var gameDirectory: [String] = []
         @Flag(help: "Scan only the specified game directories.")
         var standaloneOnly = false
+        @Flag(help: "Install detected Microsoft dependencies for the selected standalone game folders.")
+        var repair = false
         @Flag(help: "Print a human-readable report.")
         var text = false
 
         func run() async throws {
             guard !gameDirectory.isEmpty || (environment != nil && !standaloneOnly) else {
                 throw ValidationError("Specify an environment or one or more --game-directory paths.")
+            }
+            if repair, environment == nil || !standaloneOnly {
+                throw ValidationError("--repair requires --environment and --standalone-only.")
             }
             let environment = try await loadEnvironment()
             var directories = gameDirectory.map { URL(fileURLWithPath: $0, isDirectory: true) }
@@ -53,11 +58,36 @@ extension Whisky.Runtime {
                     issues.append(directory.path + ": " + error.localizedDescription)
                 }
             }
+            if repair, let environment {
+                let repaired = await repairReports(reports, in: environment)
+                reports = repaired.reports
+                issues += repaired.issues
+            }
             if text {
                 let entries = reports.map(\.summary) + issues
                 print(entries.isEmpty ? "未找到已安裝嘅 Windows 遊戲。" : entries.joined(separator: "\n\n"))
             } else {
                 try Whisky.Runtime.emit(LegacyAuditOutput(reports: reports, issues: issues))
+            }
+        }
+
+        private func repairReports(_ reports: [LegacyGameAudit], in environment: RuntimeEnvironment) async
+            -> LegacyAuditOutput {
+            guard !reports.isEmpty else { return LegacyAuditOutput(reports: [], issues: []) }
+            do {
+                let lease = try await options.coordinator().lease(id: environment.id)
+                defer { withExtendedLifetime(lease) {} }
+                let engine = try await options.store().engine(id: lease.environment.binding.engineID)
+                let repair = GameFileRepair(engine: engine, lease: lease, root: URL(fileURLWithPath: options.root)) {
+                    try? FileHandle.standardError.write(contentsOf: Data($0.utf8))
+                }
+                let result = try await repair.installMissing(from: reports)
+                let issues = result.pending.isEmpty ? [] : [
+                    "仍待修復嘅共用元件：\(result.pending.joined(separator: "、"))"
+                ]
+                return LegacyAuditOutput(reports: result.reports, issues: issues)
+            } catch {
+                return LegacyAuditOutput(reports: reports, issues: [error.localizedDescription])
             }
         }
 

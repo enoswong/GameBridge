@@ -233,11 +233,13 @@ extension Whisky.Runtime {
         @OptionGroup var options: Options
         @Option var environment: String
         @Option var appID: UInt32?
+        @Flag(help: "Ask Windows Steam to verify this game’s original files.") var verifyFiles = false
         @Flag(help: "Use a fixed Wine desktop to diagnose transparent-window input.") var virtualDesktop = false
         @Option(
             help: "Trace window/input events for one executable basename (Wine 11 diagnostic only)."
         ) var traceWindowProcess: String?
         func run() async throws {
+            if verifyFiles, appID == nil { throw ValidationError("--verify-files requires --app-id.") }
             _ = try RuntimeAdapter.debugChannels(dxmt: false, traceProcess: traceWindowProcess)
             let coordinator = try options.coordinator()
             let lease = try await coordinator.lease(id: environment)
@@ -246,21 +248,51 @@ extension Whisky.Runtime {
             guard lease.environment.status == .ready, let steamPath = lease.environment.steamRelativePath else {
                 throw RuntimeError.unboundEnvironment
             }
-            _ = try WindowsSteamCommand(prefix: lease.environment.prefix, steamRelativePath: steamPath,
-                appID: appID)
+            _ = try WindowsSteamCommand(
+                prefix: lease.environment.prefix, steamRelativePath: steamPath, appID: appID
+            )
             try await coordinator.markStatus(.running, lease: lease)
             do {
-                let request = LaunchRequest(environmentID: environment, appID: appID)
+                let repair = GameFileRepair(
+                    engine: installed, lease: lease, root: URL(fileURLWithPath: options.root), log: Self.log
+                )
+                let verify = try await prepareGame(steamPath: steamPath, repair: repair)
+                if verify { Self.announce("verifyingGameFiles") }
+                let request = LaunchRequest(environmentID: environment, appID: appID, verifyFiles: verify)
                 try await RuntimeAdapter.launch(
                     request: request, engine: installed, lease: lease, virtualDesktop: virtualDesktop,
                     traceWindowProcess: traceWindowProcess,
                     control: { event in try? Whisky.Runtime.emit(event) },
-                log: { text in try? FileHandle.standardError.write(contentsOf: Data(text.utf8)) })
+                    log: Self.log
+                )
                 try await coordinator.markStatus(lease.environment.status, lease: lease)
             } catch {
                 try? await coordinator.markStatus(.needsAttention, lease: lease)
                 throw error
             }
+        }
+
+        private func prepareGame(steamPath: String, repair: GameFileRepair) async throws -> Bool {
+            guard let appID else { return false }
+            if verifyFiles { return true }
+            let prefix = repair.lease.environment.prefix
+            let games = try? SteamLibraryScanner.scanLaunchableWindows(prefix: prefix, steamRelativePath: steamPath)
+            guard let game = games?.first(where: { $0.appID == appID }) else { return false }
+            if game.filesNeedVerification { return true }
+            guard let report = try? LegacyGameAudit.scan(directory: game.installDirectory, prefix: prefix) else {
+                return false
+            }
+            let result = try await repair.installMissing(from: [report]) { Self.announce("repairingGameDependencies") }
+            Self.announce(result.pending.isEmpty ? "gameDependenciesReady" : "someDependenciesUnresolved")
+            return false
+        }
+
+        private static func announce(_ kind: String) {
+            try? Whisky.Runtime.emit(["kind": kind, "sessionID": UUID().uuidString])
+        }
+
+        private static func log(_ text: String) {
+            try? FileHandle.standardError.write(contentsOf: Data(text.utf8))
         }
     }
     struct RepairComponents: AsyncParsableCommand {

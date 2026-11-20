@@ -43,6 +43,25 @@ final class LegacyGameAuditTests: XCTestCase {
         XCTAssertEqual(audit.unresolvedImports.count, 2)
     }
 
+    func testAutomaticRepairChoosesTheNeededArchitectureAndSkipsPresentLibraries() throws {
+        let root = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let game = root.appending(path: "game")
+        let prefix = root.appending(path: "prefix")
+        let system = prefix.appending(path: "drive_c/windows/system32")
+        try FileManager.default.createDirectory(at: game, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: system, withIntermediateDirectories: true)
+        try fixture(is64Bit: false).write(to: game.appending(path: "game.exe"))
+        try fixture(is64Bit: true).write(to: game.appending(path: "editor.exe"))
+        try Data().write(to: system.appending(path: "xinput1_3.dll"))
+        let report = try LegacyGameAudit.scan(directory: game, prefix: prefix)
+        XCTAssertEqual(GameFileRepair.components(in: [report, report]), ["vc2013-x64", "vc2013-x86"])
+
+        try Data().write(to: game.appending(path: "msvcr120.dll"))
+        let repaired = try LegacyGameAudit.scan(directory: game, prefix: prefix)
+        XCTAssertTrue(GameFileRepair.components(in: [repaired]).isEmpty)
+    }
+
     func testCatalogPinsBothArchitecturesForEveryLegacyVersion() throws {
         let installers = LegacyVisualCpp.installers
         XCTAssertEqual(installers.count, 10)

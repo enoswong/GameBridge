@@ -39,12 +39,12 @@ extension SetupView {
         }
     }
 
-    @MainActor func launchSteam(in environment: String, appID: UInt32? = nil) async {
+    @MainActor func launchSteam(in environment: String, appID: UInt32? = nil, verifyFiles: Bool = false) async {
         guard !busy else { return }
         lastLaunch = (environment, appID)
         failedLaunchEnvironment = nil
         let arguments = ["launch", "--environment", environment] + (appID.map { ["--app-id", String($0)] } ?? [])
-        await run(arguments)
+        await run(arguments + (verifyFiles ? ["--verify-files"] : []))
     }
 
     @MainActor @discardableResult func run(_ arguments: [String]) async -> Bool {
@@ -76,7 +76,7 @@ extension SetupView {
             let succeeded = status == 0 && (!isBootstrap || preparedEnvironment != nil)
             if operationID == operation {
                 if succeeded {
-                    message = isLaunch || isBootstrap ? "" : "操作已完成。"
+                    if !isLaunch, !isBootstrap { message = "操作已完成。" }
                 } else {
                     reportFailure(arguments)
                 }
@@ -132,11 +132,8 @@ extension SetupView {
                     standardOutput.removeSubrange(...newline)
                     if command == "bootstrap" {
                         preparedEnvironment = readBootstrapEvent(line, decoder: decoder) ?? preparedEnvironment
-                    } else if let control = try? decoder.decode(RunnerControlEvent.self, from: line),
-                              control.kind == "clientStarted" {
-                        // The helper keeps its lease until Steam and Wine exit.
-                        await refresh()
-                        if operationID == operation { busy = false }
+                    } else if let control = try? decoder.decode(RunnerControlEvent.self, from: line) {
+                        await receiveLaunchEvent(control, operation: operation)
                     }
                 }
             default:
@@ -144,6 +141,26 @@ extension SetupView {
             }
         }
         return (status, preparedEnvironment)
+    }
+
+    @MainActor private func receiveLaunchEvent(_ event: RunnerControlEvent, operation: UUID) async {
+        guard operationID == operation else { return }
+        switch event.kind {
+        case "repairingGameDependencies":
+            message = "正在補齊遊戲所需元件…"
+        case "someDependenciesUnresolved":
+            message = "部份元件仍未齊全。遊戲會繼續由 Steam 啟動。"
+        case "verifyingGameFiles":
+            message = "Windows Steam 將驗證遊戲檔案，完成後可在 Steam 開始遊戲。"
+        case "gameDependenciesReady":
+            message = ""
+        case "clientStarted":
+            // The helper keeps its lease until Steam and Wine exit.
+            await refresh()
+            if operationID == operation { busy = false }
+        default:
+            break
+        }
     }
 
     private func readBootstrapEvent(_ line: Data, decoder: JSONDecoder) -> String? {
