@@ -58,18 +58,10 @@ extension Whisky.Runtime {
                     issues.append(directory.path + ": " + error.localizedDescription)
                 }
             }
-            if repair, let environment, !reports.isEmpty {
-                do {
-                    let pending = try await installMissing(from: reports, in: environment)
-                    reports = try reports.map {
-                        try LegacyGameAudit.scan(directory: $0.directory, prefix: environment.prefix)
-                    }
-                    if !pending.isEmpty {
-                        issues.append("仍待修復嘅共用元件：\(pending.joined(separator: "、"))")
-                    }
-                } catch {
-                    issues.append(error.localizedDescription)
-                }
+            if repair, let environment {
+                let repaired = await repairReports(reports, in: environment)
+                reports = repaired.reports
+                issues += repaired.issues
             }
             if text {
                 let entries = reports.map(\.summary) + issues
@@ -79,15 +71,24 @@ extension Whisky.Runtime {
             }
         }
 
-        private func installMissing(from reports: [LegacyGameAudit], in environment: RuntimeEnvironment) async throws
-            -> [String] {
-            let lease = try await options.coordinator().lease(id: environment.id)
-            defer { withExtendedLifetime(lease) {} }
-            let engine = try await options.store().engine(id: lease.environment.binding.engineID)
-            let repair = GameFileRepair(engine: engine, lease: lease, root: URL(fileURLWithPath: options.root)) {
-                try? FileHandle.standardError.write(contentsOf: Data($0.utf8))
+        private func repairReports(_ reports: [LegacyGameAudit], in environment: RuntimeEnvironment) async
+            -> LegacyAuditOutput {
+            guard !reports.isEmpty else { return LegacyAuditOutput(reports: [], issues: []) }
+            do {
+                let lease = try await options.coordinator().lease(id: environment.id)
+                defer { withExtendedLifetime(lease) {} }
+                let engine = try await options.store().engine(id: lease.environment.binding.engineID)
+                let repair = GameFileRepair(engine: engine, lease: lease, root: URL(fileURLWithPath: options.root)) {
+                    try? FileHandle.standardError.write(contentsOf: Data($0.utf8))
+                }
+                let result = try await repair.installMissing(from: reports)
+                let issues = result.pending.isEmpty ? [] : [
+                    "仍待修復嘅共用元件：\(result.pending.joined(separator: "、"))"
+                ]
+                return LegacyAuditOutput(reports: result.reports, issues: issues)
+            } catch {
+                return LegacyAuditOutput(reports: reports, issues: [error.localizedDescription])
             }
-            return try await repair.installMissing(from: reports)
         }
 
         private func loadEnvironment() async throws -> RuntimeEnvironment? {

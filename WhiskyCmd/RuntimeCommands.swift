@@ -282,8 +282,8 @@ extension Whisky.Runtime {
             guard let report = try? LegacyGameAudit.scan(directory: game.installDirectory, prefix: prefix) else {
                 return false
             }
-            let pending = try await repair.installMissing(from: [report]) { Self.announce("repairingGameDependencies") }
-            Self.announce(pending.isEmpty ? "gameDependenciesReady" : "someDependenciesUnresolved")
+            let result = try await repair.installMissing(from: [report]) { Self.announce("repairingGameDependencies") }
+            Self.announce(result.pending.isEmpty ? "gameDependenciesReady" : "someDependenciesUnresolved")
             return false
         }
 

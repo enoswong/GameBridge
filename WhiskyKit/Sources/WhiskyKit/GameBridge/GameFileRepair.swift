@@ -30,9 +30,9 @@ public struct GameFileRepair {
 
     public func installMissing(
         from reports: [LegacyGameAudit], progress: @Sendable () -> Void = {}
-    ) async throws -> [String] {
+    ) async throws -> (reports: [LegacyGameAudit], pending: [String]) {
         let identifiers = Self.components(in: reports)
-        guard !identifiers.isEmpty else { return [] }
+        guard !identifiers.isEmpty else { return (reports, []) }
         let windows = try ManagedPath.child("drive_c/windows", under: lease.environment.prefix)
         guard (try? windows.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
             throw RuntimeError.io("Initialize the Windows environment before repairing game dependencies")
@@ -52,8 +52,9 @@ public struct GameFileRepair {
             }
         }
         let prefix = lease.environment.prefix
-        let checked = reports.compactMap { try? LegacyGameAudit.scan(directory: $0.directory, prefix: prefix) }
-        return Set(failed + Self.components(in: checked)).sorted()
+        let checked = reports.map { (try? LegacyGameAudit.scan(directory: $0.directory, prefix: prefix)) ?? $0 }
+        let pending = Set(failed + Self.components(in: checked)).sorted()
+        return (checked, pending)
     }
 
     private func install(_ id: String, cache: URL) async throws {
