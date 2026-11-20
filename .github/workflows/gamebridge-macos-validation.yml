@@ -1,34 +1,18 @@
-name: GameBridge macOS validation
+name: GameBridge lint diagnostics
 on:
   push:
     branches: [codex/gamebridge-macos-validation]
 permissions:
   contents: read
 jobs:
-  validate:
-    runs-on: macos-15
-    timeout-minutes: 18
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          persist-credentials: false
-      - name: WhiskyKit tests
-        run: swift test --package-path WhiskyKit
-      - name: Build unsigned GameBridge
-        if: ${{ !cancelled() }}
-        run: >-
-          xcodebuild -project Whisky.xcodeproj -scheme Whisky -configuration Debug
-          -destination 'platform=macOS,arch=arm64' -derivedDataPath build/local
-          CODE_SIGNING_ALLOWED=NO GAMEBRIDGE_SKIP_LINT=YES build
-  lint-baseline:
+  violations:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: 889942a99fdd6a81c7e2c0e2a35cdaf9d1e88e38
           persist-credentials: false
-      - name: Check existing SwiftLint baseline
+      - name: SwiftLint JSON
         uses: norio-nomura/action-swiftlint@3.2.1
         with:
-          args: --strict
+          args: --strict --reporter json
