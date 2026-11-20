@@ -91,7 +91,7 @@ final class SteamLibraryTests: XCTestCase {
         XCTAssertEqual(snapshot.issues.first?.path, folders.path)
     }
 
-    func testManagedPlayLibraryListsOnlyCompleteGamesInTheDefaultLibrary() throws {
+    func testManagedPlayLibraryKeepsDamagedGamesVisibleForRepair() throws {
         let prefix = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: prefix) }
         let steamPath = "drive_c/Program Files (x86)/Steam/Steam.exe"
@@ -103,7 +103,8 @@ final class SteamLibraryTests: XCTestCase {
             (apps, 481, "Zulu", 4, true),
             (apps, 482, "Alpha", 4, true),
             (apps, 483, "Downloading", 1026, true),
-            (apps, 484, "Stale", 4, false),
+            (apps, 484, "Missing directory", 4, false),
+            (apps, 486, "Damaged", 128, true),
             (apps, 228980, "Steamworks Common Redistributables", 4, true),
             (otherApps, 485, "Other library", 4, true)
         ] {
@@ -121,7 +122,7 @@ final class SteamLibraryTests: XCTestCase {
         )
 
         let games = try SteamLibraryScanner.scanLaunchableWindows(prefix: prefix, steamRelativePath: steamPath)
-        XCTAssertEqual(games.map(\.appID), [482, 481])
+        XCTAssertEqual(games.map(\.appID), [482, 486, 484, 481])
         XCTAssertTrue(games.allSatisfy { $0.platform == .windowsWine })
     }
 
