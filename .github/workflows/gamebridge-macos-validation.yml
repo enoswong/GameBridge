@@ -1,0 +1,22 @@
+name: GameBridge macOS validation
+on:
+  push:
+    branches: [codex/gamebridge-macos-validation]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: macos-15
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: WhiskyKit tests
+        run: swift test --package-path WhiskyKit
+      - name: Build unsigned GameBridge
+        if: ${{ !cancelled() }}
+        run: >-
+          xcodebuild -project Whisky.xcodeproj -scheme Whisky -configuration Debug
+          -destination 'platform=macOS,arch=arm64' -derivedDataPath build/local
+          CODE_SIGNING_ALLOWED=NO GAMEBRIDGE_SKIP_LINT=YES build
