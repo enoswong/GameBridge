@@ -38,20 +38,23 @@ struct ContentView: View {
     @State private var bottleFilter = ""
     @State private var managedEnvironments: [RuntimeEnvironment] = []
     @State private var managedError = ""
+    @State private var navigationColumns: NavigationSplitViewVisibility = .detailOnly
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $navigationColumns) {
             sidebar
         } detail: {
             detail
         }
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showSetup = true
-                } label: {
-                    Image(systemName: "plus")
-                        .help("button.createBottle")
+            if navigationColumns != .detailOnly {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showSetup = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .help("button.createBottle")
+                    }
                 }
             }
             ToolbarItem(placement: .primaryAction) {
@@ -103,6 +106,9 @@ struct ContentView: View {
             bottleVM.loadBottles()
             selected = selectedBottleURL
             await refreshManagedEnvironments()
+            if managedEnvironments.count > 1 || !bottleVM.bottles.isEmpty {
+                navigationColumns = .all
+            }
             bottlesLoaded = true
 
             if selected == nil { selected = bottleVM.bottles.first(where: { $0.isAvailable })?.url }
@@ -133,10 +139,11 @@ struct ContentView: View {
                 }
             }
         }
-        .task {
+        .task(id: bottlesLoaded) {
+            guard bottlesLoaded else { return }
             while !Task.isCancelled {
-                await refreshManagedEnvironments()
                 do { try await Task.sleep(for: .seconds(3)) } catch { break }
+                await refreshManagedEnvironments()
             }
         }
     }
