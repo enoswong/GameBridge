@@ -2,13 +2,17 @@
 import Darwin
 import Foundation
 
-struct BootstrapInstaller: Codable, Sendable {
+struct BootstrapInstaller: Codable, Equatable, Sendable {
     var id: String
     var fileName: String
     var url: String
     var sha256: String
     var maximumBytes: UInt64
     func validate() throws {
+        if let pinned = LegacyVisualCpp.installers.first(where: { $0.id == id }) {
+            guard self == pinned else { throw RuntimeError.invalidManifest("legacy Visual C++ installer") }
+            return
+        }
         let names = ["steam": "SteamSetup.exe", "vc-x64": "VC_redist.x64.exe", "vc-x86": "VC_redist.x86.exe",
             "directx": "directx_Jun2010_redist.exe"]
         let hosts = ["aka.ms", "download.microsoft.com", "cdn.akamai.steamstatic.com"]

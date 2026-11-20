@@ -13,7 +13,7 @@ extension Whisky {
                 Bootstrap.self, Host.self, ScanMac.self, Engines.self, InstallEngine.self, Probe.self,
                 Environments.self, CreateEnvironment.self, Initialize.self, AttachSteam.self, Launch.self,
                 InstallSteam.self, RepairComponents.self, Recover.self, Clone.self, ArchiveEnvironment.self,
-                RestoreEnvironment.self
+                RestoreEnvironment.self, AuditLegacy.self, PrepareLegacy.self
             ]
         )
 

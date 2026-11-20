@@ -97,6 +97,18 @@ extension SetupView {
         }
     }
 
+    @MainActor private func appendOutput(_ text: String, audit: Bool) {
+        guard audit else {
+            log = String((log + text).suffix(16_000))
+            return
+        }
+        let limit = 1_000_000
+        guard log.count <= limit else { return }
+        let remaining = limit - log.count
+        log += text.prefix(remaining)
+        if text.count > remaining { log += "\n已達顯示上限，可用命令列讀取完整報告。\n" }
+    }
+
     @MainActor private func readEvents(
         _ events: AsyncStream<ProcessOutput>, command: String?, operation: UUID
     ) async -> (status: Int32?, preparedEnvironment: String?) {
@@ -110,9 +122,9 @@ extension SetupView {
             case .terminated(let child):
                 status = child.terminationStatus
             case .error(let text) where operationID == operation:
-                log = String((log + text).suffix(16000))
+                appendOutput(text, audit: command == "audit-legacy")
             case .message(let text) where operationID == operation:
-                log = String((log + text).suffix(16000))
+                appendOutput(text, audit: command == "audit-legacy")
                 guard command == "bootstrap" || command == "launch" else { continue }
                 standardOutput += text
                 while let newline = standardOutput.firstIndex(of: "\n") {
