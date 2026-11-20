@@ -4,6 +4,11 @@ import Foundation
 /// Verified compatibility profile bound to one environment and engine.
 /// Schema 2 stages bundled components before the game is installed.
 enum DeskrawlCompatibility {
+    static let registryArguments = [
+        "reg", "add", "HKCU\\Software\\Wine\\AppDefaults\\Deskrawl.exe\\DllOverrides",
+        "/v", "version", "/t", "REG_SZ", "/d", "native,builtin", "/f"
+    ]
+
     struct Profile: Codable {
         let schema: Int
         let engineID: String
@@ -49,7 +54,8 @@ enum DeskrawlCompatibility {
     /// Explicit schema-1 profiles retain their already accepted local components.
     static func prepareBundled(prefix: URL, engineID: String, directory: URL?) throws -> Bool {
         guard let directory else { return false }
-        let profileURL = try ManagedPath.child("Compatibility/deskrawl-v1.json", under: prefix.deletingLastPathComponent())
+        let profileURL = try ManagedPath.child(
+            "Compatibility/deskrawl-v1.json", under: prefix.deletingLastPathComponent())
         if FileManager.default.fileExists(atPath: profileURL.path) {
             _ = try environment(prefix: prefix, engineID: engineID)
             let profile = try JSONDecoder().decode(Profile.self, from: Data(contentsOf: profileURL))
@@ -66,12 +72,15 @@ enum DeskrawlCompatibility {
         let root = prefix.deletingLastPathComponent()
         let output = try ManagedPath.child("Compatibility", under: root)
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-        for (name, source) in [("deskrawl-alpha.dylib", payload.bridgeFile), ("deskrawl-pointer.dll", payload.pointerFile)] {
+        for (name, source) in [("deskrawl-alpha.dylib", payload.bridgeFile), (
+            "deskrawl-pointer.dll", payload.pointerFile)] {
             let target = try ManagedPath.child(name, under: output)
             try Data(contentsOf: ManagedPath.child(source, under: directory)).write(to: target, options: .atomic)
         }
-        let profile = Profile(schema: 2, engineID: payload.engineID, bridgeSHA256: payload.bridgeSHA256, pointerSHA256: payload.pointerSHA256)
-        try JSONEncoder().encode(profile).write(to: ManagedPath.child("deskrawl-v1.json", under: output), options: .atomic)
+        let profile = Profile(schema: 2, engineID: payload.engineID, bridgeSHA256: payload.bridgeSHA256,
+            pointerSHA256: payload.pointerSHA256)
+        try JSONEncoder().encode(profile).write(to: ManagedPath.child(
+            "deskrawl-v1.json", under: output), options: .atomic)
     }
 
 }

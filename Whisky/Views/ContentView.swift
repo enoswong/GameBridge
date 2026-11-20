@@ -152,11 +152,14 @@ struct ContentView: View {
         ScrollViewReader { proxy in
             List(selection: $selected) {
                 Section("Windows 環境") {
-                    ForEach(managedEnvironments.filter { bottleFilter.isEmpty || $0.name.localizedCaseInsensitiveContains(bottleFilter) }) { environment in
+                    let visibleEnvironments = managedEnvironments.filter {
+                        bottleFilter.isEmpty || $0.name.localizedCaseInsensitiveContains(bottleFilter)
+                    }
+                    ForEach(visibleEnvironments) { environment in
                         Label {
                             VStack(alignment: .leading) {
                                 Text(environment.name)
-                                Text(environment.status == .running ? "執行中" : environment.status == .needsAttention ? "需要恢復" : "已建立")
+                                Text(managedStatusLabel(environment.status))
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                         } icon: { Image(systemName: "desktopcomputer") }
@@ -211,6 +214,14 @@ struct ContentView: View {
                           initialEnvironment: managedEnvironments.first(where: { $0.prefix == selected })?.id,
                           embedded: true)
             }
+        }
+    }
+
+    private func managedStatusLabel(_ status: EnvironmentStatus) -> String {
+        switch status {
+        case .running: return "執行中"
+        case .needsAttention: return "需要恢復"
+        default: return "已建立"
         }
     }
 

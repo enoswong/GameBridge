@@ -16,3 +16,28 @@ jobs:
         uses: norio-nomura/action-swiftlint@3.2.1
         with:
           args: --strict --reporter json
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: WhiskyKit tests
+        run: swift test --package-path WhiskyKit
+      - name: Type-check catalog scripts
+        run: |
+          swiftc -typecheck scripts/sign-research-catalog.swift
+          swiftc -typecheck scripts/sign-dxmt-research-catalog.swift
+      - name: Build unsigned GameBridge
+        if: ${{ !cancelled() }}
+        run: >-
+          xcodebuild -project Whisky.xcodeproj -scheme Whisky -configuration Debug
+          -destination 'platform=macOS,arch=arm64' -derivedDataPath build/local
+          CODE_SIGNING_ALLOWED=NO GAMEBRIDGE_SKIP_LINT=YES build
+      - name: Smoke-test runtime commands
+        run: |
+          cli=build/local/Build/Products/Debug/GameBridge.app/Contents/Resources/WhiskyCmd
+          "$cli" runtime --help
+          "$cli" runtime launch --help
+          "$cli" runtime bootstrap --help

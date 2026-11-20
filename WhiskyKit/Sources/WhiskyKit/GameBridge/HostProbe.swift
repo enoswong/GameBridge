@@ -27,14 +27,19 @@ public struct HostSnapshot: Codable, Sendable {
 public enum HostProbe {
     public static func inspect(storageURL: URL) throws -> HostSnapshot {
         let version = ProcessInfo.processInfo.operatingSystemVersion
-        let volume = try storageURL.resourceValues(forKeys: [.volumeIsLocalKey, .volumeAvailableCapacityForImportantUsageKey])
+        let volume = try storageURL.resourceValues(forKeys: [
+            .volumeIsLocalKey, .volumeAvailableCapacityForImportantUsageKey])
         var information = statfs()
         guard statfs(storageURL.path, &information) == 0 else { throw RuntimeError.io("inspect filesystem") }
         let fileSystem = withUnsafeBytes(of: information.f_fstypename) { raw in
-            String(decoding: raw.prefix { $0 != 0 }, as: UTF8.self)
+            String(bytes: raw.prefix { $0 != 0 }, encoding: .utf8) ?? "unknown"
         }
         let device = MTLCreateSystemDefaultDevice()
-        let families: [(String, MTLGPUFamily)] = [("apple1", .apple1), ("apple2", .apple2), ("apple3", .apple3), ("apple4", .apple4), ("apple5", .apple5), ("apple6", .apple6), ("apple7", .apple7), ("apple8", .apple8), ("apple9", .apple9)]
+        let families: [(String, MTLGPUFamily)] = [
+            ("apple1", .apple1), ("apple2", .apple2), ("apple3", .apple3),
+            ("apple4", .apple4), ("apple5", .apple5), ("apple6", .apple6),
+            ("apple7", .apple7), ("apple8", .apple8), ("apple9", .apple9)
+        ]
         #if arch(arm64)
         let architecture = "arm64"
         #else
@@ -43,7 +48,8 @@ public enum HostProbe {
         return HostSnapshot(macOSVersion: "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)",
                             macOSBuild: sysctlString("kern.osversion"), architecture: architecture,
                             physicalMemoryBytes: ProcessInfo.processInfo.physicalMemory,
-                            gpuName: device?.name, metalFamilies: families.filter { device?.supportsFamily($0.1) == true }.map(\.0),
+                            gpuName: device?.name, metalFamilies: families.filter {
+                                device?.supportsFamily($0.1) == true }.map(\.0),
                             rosettaInstalled: Rosetta2.isRosettaInstalled, storageFileSystem: fileSystem,
                             storageIsLocal: volume.volumeIsLocal == true,
                             availableStorageBytes: volume.volumeAvailableCapacityForImportantUsage)
@@ -53,6 +59,6 @@ public enum HostProbe {
         guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else { return "unknown" }
         var bytes = [UInt8](repeating: 0, count: size)
         guard sysctlbyname(name, &bytes, &size, nil, 0) == 0 else { return "unknown" }
-        return String(decoding: bytes.prefix { $0 != 0 }, as: UTF8.self)
+        return String(bytes: bytes.prefix { $0 != 0 }, encoding: .utf8) ?? "unknown"
     }
 }

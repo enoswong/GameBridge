@@ -29,7 +29,8 @@ public enum ProcessOutput: Hashable {
 
 public extension Process {
     /// Drain both pipes concurrently; emit termination only after their final bytes.
-    func runStream(name: String, fileHandle: FileHandle?, drainTimeout: TimeInterval? = nil) throws -> AsyncStream<ProcessOutput> {
+    func runStream(
+        name: String, fileHandle: FileHandle?, drainTimeout: TimeInterval? = nil) throws -> AsyncStream<ProcessOutput> {
         let drainDeadline = drainTimeout.map { ProcessInfo.processInfo.systemUptime + $0 }
         let output = Pipe()
         let errors = Pipe()
@@ -148,14 +149,14 @@ struct ProcessUTF8Decoder {
                 (lead >= 0xe0 && lead <= 0xef ? 3 : (lead >= 0xc2 && lead <= 0xdf ? 2 : 1))
             if required > end - (start - 1) { end = start - 1 }
         }
-        let text = String(decoding: pending.prefix(end), as: UTF8.self)
+        let text = String(decoding: pending.prefix(end), as: Unicode.UTF8.self)
         pending = Data(pending.dropFirst(end))
         return text
     }
 
     mutating func finish() -> String {
         defer { pending.removeAll() }
-        return String(decoding: pending, as: UTF8.self)
+        return String(decoding: pending, as: Unicode.UTF8.self)
     }
 }
 

@@ -10,29 +10,37 @@ final class EngineStoreTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let key = Curve25519.Signing.PrivateKey()
         let archive = root.appending(path: "engine.tar")
-        let bytes = TarFixture.archive([("bin/wine64", Data("fixture-wine".utf8)), ("bin/wineserver", Data("fixture-server".utf8))])
+        let bytes = TarFixture.archive([("bin/wine64", Data(
+            "fixture-wine".utf8)), ("bin/wineserver", Data("fixture-server".utf8))])
         try bytes.write(to: archive)
         var manifest = RuntimeFixture.manifest()
         manifest.archiveSHA256 = DigestTools.sha256(bytes)
         manifest.archiveBytes = UInt64(bytes.count)
         var catalog = RuntimeFixture.catalog()
         catalog.engines = [manifest]
-        let store = try EngineStore(root: root.appending(path: "store"), trustedKeys: ["test": key.publicKey.rawRepresentation])
-        let installed = try await store.install(engineID: manifest.id, envelope: RuntimeFixture.sign(catalog, key: key), archive: archive, now: RuntimeFixture.now)
-        XCTAssertEqual(try Data(contentsOf: installed.directory.appending(path: "bin/wine64")), Data("fixture-wine".utf8))
-        let duplicate = try await store.install(engineID: manifest.id, envelope: RuntimeFixture.sign(catalog, key: key), archive: archive, now: RuntimeFixture.now)
+        let store = try EngineStore(root: root.appending(path: "store"), trustedKeys: [
+            "test": key.publicKey.rawRepresentation])
+        let installed = try await store.install(engineID: manifest.id, envelope: RuntimeFixture.sign(catalog,
+            key: key), archive: archive, now: RuntimeFixture.now)
+        XCTAssertEqual(try Data(contentsOf: installed.directory.appending(
+            path: "bin/wine64")), Data("fixture-wine".utf8))
+        let duplicate = try await store.install(engineID: manifest.id, envelope: RuntimeFixture.sign(catalog,
+            key: key), archive: archive, now: RuntimeFixture.now)
         XCTAssertEqual(duplicate.directory, installed.directory)
         catalog.revision = 2
         catalog.engines[0].id = "bad-engine"
         try Data("corrupt".utf8).write(to: archive)
         do {
-            _ = try await store.install(engineID: "bad-engine", envelope: RuntimeFixture.sign(catalog, key: key), archive: archive, now: RuntimeFixture.now)
+            _ = try await store.install(engineID: "bad-engine", envelope: RuntimeFixture.sign(catalog, key: key),
+                archive: archive, now: RuntimeFixture.now)
             XCTFail("Corrupted archive was accepted")
         } catch { XCTAssertEqual(error as? RuntimeError, .archiveHashMismatch) }
-        XCTAssertEqual(try Data(contentsOf: installed.directory.appending(path: "bin/wine64")), Data("fixture-wine".utf8))
+        XCTAssertEqual(try Data(contentsOf: installed.directory.appending(
+            path: "bin/wine64")), Data("fixture-wine".utf8))
         let entries = try await store.installedEngines()
         XCTAssertEqual(entries.map(\.manifest.id), [manifest.id])
-        let reopened = try EngineStore(root: root.appending(path: "store"), trustedKeys: ["test": key.publicKey.rawRepresentation])
+        let reopened = try EngineStore(root: root.appending(path: "store"), trustedKeys: [
+            "test": key.publicKey.rawRepresentation])
         let recovered = try await reopened.installedEngines()
         XCTAssertEqual(recovered.count, 1)
     }
@@ -40,7 +48,8 @@ final class EngineStoreTests: XCTestCase {
     func testArchiveRejectsTraversalLinksTruncationAndSizeLimit() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        for (name, type) in [("../escape", UInt8(48)), ("/tmp/escape", 48), ("link", 50), ("hard", 49), ("device", 51)] {
+        for (name, type) in [("../escape", UInt8(48)), (
+            "/tmp/escape", 48), ("link", 50), ("hard", 49), ("device", 51)] {
             let archive = root.appending(path: UUID().uuidString)
             try TarFixture.archive([(name, Data("x".utf8))], type: type).write(to: archive)
             let output = root.appending(path: UUID().uuidString)
@@ -67,7 +76,8 @@ final class EngineStoreTests: XCTestCase {
 }
 
 func temporaryDirectory() throws -> URL {
-    let root = FileManager.default.temporaryDirectory.appending(path: "GameBridgeTests-" + UUID().uuidString).resolvingSymlinksInPath()
+    let root = FileManager.default.temporaryDirectory.appending(
+        path: "GameBridgeTests-" + UUID().uuidString).resolvingSymlinksInPath()
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     return root
 }
