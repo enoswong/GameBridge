@@ -78,7 +78,10 @@ struct ContentView: View {
             BottleCreationView(newlyCreatedBottleURL: $newlyCreatedBottleURL)
         }
         .sheet(isPresented: $showSetup) {
-            SetupView(showSetup: $showSetup, firstTime: false)
+            ScrollView {
+                SetupView(showSetup: $showSetup, firstTime: false)
+            }
+            .frame(width: 680, height: 420)
         }
         .sheet(item: $openedFileURL) { url in
             FileOpenView(fileURL: url,
@@ -97,20 +100,13 @@ struct ContentView: View {
             openedFileURL = url
         }
         .task {
-            await refreshManagedEnvironments()
             bottleVM.loadBottles()
+            selected = selectedBottleURL
+            await refreshManagedEnvironments()
             bottlesLoaded = true
 
-            if !bottleVM.bottles.isEmpty || bottleVM.countActive() != 0 {
-                if let bottle = bottleVM.bottles.first(where: { $0.url == selectedBottleURL && $0.isAvailable }) {
-                    selected = bottle.url
-                } else {
-                    selected = bottleVM.bottles[0].url
-                }
-            }
-
-            if selected == nil { selected = managedEnvironments.first?.prefix }
-            if !managedEnvironments.isEmpty { return }
+            if selected == nil { selected = bottleVM.bottles.first(where: { $0.isAvailable })?.url }
+            if !managedEnvironments.isEmpty || bottleVM.bottles.isEmpty { return }
             if !WhiskyWineInstaller.isWhiskyWineInstalled() {
                 showSetup = true
             }
@@ -198,32 +194,15 @@ struct ContentView: View {
 
     @ViewBuilder
     var detail: some View {
-        if let bottle = selected {
-            if let environment = managedEnvironments.first(where: { $0.prefix == bottle }) {
-                ScrollView {
-                    SetupView(showSetup: $showSetup, firstTime: false, initialEnvironment: environment.id, embedded: true)
-                }.id(environment.id)
-            } else if let bottle = bottleVM.bottles.first(where: { $0.url == bottle }) {
-                BottleView(bottle: bottle)
-                    .disabled(bottle.inFlight)
-                    .id(bottle.url)
-            }
-        } else {
-            if (bottleVM.bottles.isEmpty || bottleVM.countActive() == 0) && bottlesLoaded {
-                VStack {
-                    Text("main.createFirst")
-                    Button {
-                    showSetup = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "plus")
-                            Text("button.createBottle")
-                        }
-                        .padding(6)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.accentColor)
-                }
+        if let bottle = bottleVM.bottles.first(where: { $0.url == selected }) {
+            BottleView(bottle: bottle)
+                .disabled(bottle.inFlight)
+                .id(bottle.url)
+        } else if bottlesLoaded {
+            ScrollView {
+                SetupView(showSetup: $showSetup, firstTime: false,
+                          initialEnvironment: managedEnvironments.first(where: { $0.prefix == selected })?.id,
+                          embedded: true)
             }
         }
     }
@@ -234,8 +213,11 @@ struct ContentView: View {
             managedEnvironments = try await coordinator.environments().sorted { $0.createdAt < $1.createdAt }
             managedError = ""
             if let selected, !managedEnvironments.contains(where: { $0.prefix == selected }),
-               !bottleVM.bottles.contains(where: { $0.url == selected }) { self.selected = nil }
-            if selected == nil { selected = managedEnvironments.first?.prefix }
+               !bottleVM.bottles.contains(where: { $0.url == selected && $0.isAvailable }) { self.selected = nil }
+            if selected == nil {
+                selected = managedEnvironments.first(where: { $0.steamRelativePath != nil })?.prefix
+                    ?? managedEnvironments.first?.prefix
+            }
         } catch { managedError = error.localizedDescription }
     }
 

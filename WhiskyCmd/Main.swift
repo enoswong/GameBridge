@@ -249,13 +249,19 @@ extension Whisky {
             @Option var payload: String?
             @Flag var newEnvironment = false
             @Flag var acceptComponentLicenses = false
+            @Flag(help: "Emit setup stage events before the final JSON result.") var showProgress = false
             func run() async throws {
                 guard acceptComponentLicenses else { throw ValidationError("Read the bundled Microsoft terms and pass --accept-component-licenses to install.") }
                 guard let directory = payload.map({ URL(fileURLWithPath: $0) }) ?? BootstrapPayload.bundledDirectory() else {
                     throw ValidationError("This build has no bundled bootstrap payload.")
                 }
+                let emitProgress = showProgress
                 try Runtime.emit(await OneClickBootstrap.prepare(root: URL(fileURLWithPath: options.root), payloadDirectory: directory,
-                    newEnvironment: newEnvironment, log: { text in try? FileHandle.standardError.write(contentsOf: Data(text.utf8)) }))
+                    newEnvironment: newEnvironment,
+                    progress: { stage in
+                        if emitProgress { try? Runtime.emit(["bootstrapStage": stage.rawValue]) }
+                    },
+                    log: { text in try? FileHandle.standardError.write(contentsOf: Data(text.utf8)) }))
             }
         }
         struct Host: ParsableCommand {

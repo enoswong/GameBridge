@@ -91,9 +91,16 @@ struct BootstrapState: Codable {
     func contains(_ step: String, digest: String) -> Bool { completed[step] == digest }
 }
 
+public enum BootstrapStage: String, Codable, Sendable {
+    case checkingRequirements, preparingEnvironment, installingComponents, installingSteam, finishing
+}
+
 public enum OneClickBootstrap {
     public static func prepare(root: URL, payloadDirectory: URL, newEnvironment: Bool = false,
-                               name: String = "Windows Steam", log: @escaping @Sendable (String) -> Void) async throws -> RuntimeEnvironment {
+                               name: String = "Windows Steam",
+                               progress: @escaping @Sendable (BootstrapStage) -> Void = { _ in },
+                               log: @escaping @Sendable (String) -> Void) async throws -> RuntimeEnvironment {
+        progress(.checkingRequirements)
         let payload = try BootstrapPayload.load(from: payloadDirectory)
         let keys = try JSONDecoder().decode([String: Data].self, from: Data(contentsOf: ManagedPath.child(payload.trustKeysFile, under: payloadDirectory)))
         let store = try EngineStore(root: root, trustedKeys: keys)
@@ -107,6 +114,7 @@ public enum OneClickBootstrap {
         guard manifest.distribution == .redistributable else { throw RuntimeError.invalidManifest("internal runtime cannot be used in a public build") }
         #endif
         try HostProbe.inspect(storageURL: root).validate(for: manifest)
+        progress(.preparingEnvironment)
         let engine: InstalledEngine
         if let installed = try await store.installedEngines().first(where: { $0.manifest.id == payload.engineID }) {
             guard installed.manifest == manifest else { throw RuntimeError.engineAlreadyInstalled }
@@ -140,7 +148,9 @@ public enum OneClickBootstrap {
             }
             let cache = try ManagedPath.child("Downloads", under: root)
             try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+            progress(.installingComponents)
             for id in ["vc-x64", "vc-x86", "directx", "steam"] {
+                if id == "steam" { progress(.installingSteam) }
                 let item = payload.installers.first { $0.id == id }!
                 if state.contains(id, digest: item.sha256) { continue }
                 let installer = try await item.obtain(cache: cache, log: log)
@@ -159,6 +169,7 @@ public enum OneClickBootstrap {
                 state.completed[id] = item.sha256
                 try JSONEncoder().encode(state).write(to: stateURL, options: .atomic)
             }
+            progress(.finishing)
             log("配置自動遊戲相容性修正…\n")
             try DeskrawlCompatibility.provision(payload: payload, directory: payloadDirectory, prefix: lease.environment.prefix)
             try await RuntimeAdapter.runBootstrapTool(engine: engine, lease: lease, arguments: ["reg", "add", "HKCU\\Software\\Wine\\AppDefaults\\Deskrawl.exe\\DllOverrides", "/v", "version", "/t", "REG_SZ", "/d", "native,builtin", "/f"], log: log)

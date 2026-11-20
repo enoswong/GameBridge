@@ -30,14 +30,32 @@ public enum SteamLibraryScanner {
         try WindowsSteamCommand.validatePE(steamRoot.appending(path: "Steam.exe"))
         return try scan(steamRoot: steamRoot, prefix: prefix)
     }
-    private static func scan(steamRoot: URL, prefix: URL?) throws -> SteamLibrarySnapshot {
+    /// The player view only starts games in the managed Steam installation's default library.
+    public static func scanLaunchableWindows(prefix: URL, steamRelativePath: String) throws -> [SteamInstalledGame] {
+        let command = try WindowsSteamCommand(prefix: prefix, steamRelativePath: steamRelativePath, appID: nil)
+        let steamRoot = URL(fileURLWithPath: command.arguments[0]).deletingLastPathComponent()
+        let apps = try ManagedPath.child("steamapps", under: steamRoot)
+        guard FileManager.default.fileExists(atPath: apps.path) else { return [] }
+        return try scan(steamRoot: steamRoot, prefix: prefix, includeAdditionalLibraries: false).games
+            .filter { game in
+                guard game.isFullyInstalled, game.appID != 228980 else { return false } // Steamworks Common Redistributables
+                var isDirectory: ObjCBool = false
+                return FileManager.default.fileExists(atPath: game.installDirectory.path, isDirectory: &isDirectory)
+                    && isDirectory.boolValue
+            }
+            .sorted { lhs, rhs in
+                let order = lhs.name.localizedStandardCompare(rhs.name)
+                return order == .orderedSame ? lhs.appID < rhs.appID : order == .orderedAscending
+            }
+    }
+    private static func scan(steamRoot: URL, prefix: URL?, includeAdditionalLibraries: Bool = true) throws -> SteamLibrarySnapshot {
         var libraries = [steamRoot.standardizedFileURL.resolvingSymlinksInPath()]
         var issues: [SteamScanIssue] = []
         let foldersFile = steamRoot.appending(path: "steamapps/libraryfolders.vdf")
         guard FileManager.default.fileExists(atPath: steamRoot.appending(path: "steamapps").path) else {
             throw SteamMetadataError.unavailable(steamRoot.path)
         }
-        if FileManager.default.fileExists(atPath: foldersFile.path) {
+        if includeAdditionalLibraries, FileManager.default.fileExists(atPath: foldersFile.path) {
             do {
                 let folders = try ValveKeyValues.read(foldersFile).object("libraryfolders")
                 for key in folders.values.keys.sorted() where UInt32(key) != nil {

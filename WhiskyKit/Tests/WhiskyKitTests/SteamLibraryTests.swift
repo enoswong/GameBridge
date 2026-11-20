@@ -42,6 +42,57 @@ final class SteamLibraryTests: XCTestCase {
         XCTAssertTrue(snapshot.games.isEmpty)
         XCTAssertEqual(snapshot.issues.count, 1)
     }
+    func testManagedPlayLibraryStartsEmptyBeforeSteamCreatesItsLibrary() throws {
+        let prefix = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: prefix) }
+        let steamPath = "drive_c/Program Files (x86)/Steam/Steam.exe"
+        try writeWindowsSteam(to: prefix.appending(path: steamPath))
+
+        let games = try SteamLibraryScanner.scanLaunchableWindows(prefix: prefix, steamRelativePath: steamPath)
+        XCTAssertTrue(games.isEmpty)
+    }
+
+    func testManagedPlayLibraryListsOnlyCompleteGamesInTheDefaultLibrary() throws {
+        let prefix = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: prefix) }
+        let steamPath = "drive_c/Program Files (x86)/Steam/Steam.exe"
+        let steam = prefix.appending(path: steamPath)
+        try writeWindowsSteam(to: steam)
+        let apps = steam.deletingLastPathComponent().appending(path: "steamapps")
+        let otherApps = prefix.appending(path: "drive_c/OtherLibrary/steamapps")
+        for (directory, appID, name, flags, installed) in [
+            (apps, 481, "Zulu", 4, true),
+            (apps, 482, "Alpha", 4, true),
+            (apps, 483, "Downloading", 1026, true),
+            (apps, 484, "Stale", 4, false),
+            (apps, 228980, "Steamworks Common Redistributables", 4, true),
+            (otherApps, 485, "Other library", 4, true)
+        ] {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            if installed {
+                try FileManager.default.createDirectory(at: directory.appending(path: "common/\(name)"), withIntermediateDirectories: true)
+            }
+            try """
+            "AppState" { "appid" "\(appID)" "name" "\(name)" "installdir" "\(name)" "StateFlags" "\(flags)" }
+            """.write(to: directory.appending(path: "appmanifest_\(appID).acf"), atomically: true, encoding: .utf8)
+        }
+        try #""libraryfolders" { "1" { "path" "C:\\OtherLibrary" } }"#.write(
+            to: apps.appending(path: "libraryfolders.vdf"), atomically: true, encoding: .utf8
+        )
+
+        let games = try SteamLibraryScanner.scanLaunchableWindows(prefix: prefix, steamRelativePath: steamPath)
+        XCTAssertEqual(games.map(\.appID), [482, 481])
+        XCTAssertTrue(games.allSatisfy { $0.platform == .windowsWine })
+    }
+
+    private func writeWindowsSteam(to file: URL) throws {
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var pe = Data(repeating: 0, count: 128)
+        pe[0] = 0x4d; pe[1] = 0x5a; pe[0x3c] = 64
+        pe[64] = 0x50; pe[65] = 0x45; pe[68] = 0x4c; pe[69] = 0x01
+        try pe.write(to: file)
+    }
+
     func testWindowsSteamMustBeAPEBinaryAndLaunchUsesItsPrefix() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
