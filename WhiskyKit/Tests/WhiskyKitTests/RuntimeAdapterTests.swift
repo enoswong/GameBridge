@@ -24,7 +24,8 @@ final class RuntimeAdapterTests: XCTestCase {
         XCTAssertEqual(RuntimeAdapter.dllOverrides(dxmt: false),
                        "winemenubuilder.exe=d;vcruntime140,vcruntime140_1,msvcp140_2=n,b")
         XCTAssertEqual(RuntimeAdapter.dllOverrides(dxmt: true),
-                       "winemenubuilder.exe=d;d3d11,dxgi,d3d10core=n;winemetal=b;vcruntime140,vcruntime140_1,msvcp140_2=n,b")
+                       "winemenubuilder.exe=d;d3d11,dxgi,d3d10core=n;winemetal=b;"
+                        + "vcruntime140,vcruntime140_1,msvcp140_2=n,b")
     }
     func testWindowTraceIsScopedToOneExecutableAndRejectsChannelInjection() throws {
         XCTAssertEqual(try RuntimeAdapter.debugChannels(dxmt: true, traceProcess: nil), "fixme-all,+loaddll")
@@ -37,7 +38,8 @@ final class RuntimeAdapterTests: XCTestCase {
     }
     func testUnprovisionedGraphicsAndSynchronizationAreRejected() throws {
         var manifest = RuntimeFixture.manifest()
-        var binding = RuntimeBinding(engineID: manifest.id, cpuMode: manifest.cpuMode, backend: .dxmt, synchronization: "none")
+        var binding = RuntimeBinding(engineID: manifest.id, cpuMode: manifest.cpuMode, backend: .dxmt,
+            synchronization: "none")
         XCTAssertThrowsError(try RuntimeAdapter.validateExecution(binding: binding, manifest: manifest))
         manifest.backends = [.wineD3D]; binding.backend = .wineD3D
         XCTAssertNoThrow(try RuntimeAdapter.validateExecution(binding: binding, manifest: manifest))
@@ -48,7 +50,8 @@ final class RuntimeAdapterTests: XCTestCase {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let coordinator = try EnvironmentCoordinator(root: root)
-        let environment = try await coordinator.create(name: "lease", manifest: RuntimeFixture.manifest(), backend: .dxmt, synchronization: "none")
+        let environment = try await coordinator.create(
+            name: "lease", manifest: RuntimeFixture.manifest(), backend: .dxmt, synchronization: "none")
         let started = expectation(description: "child started")
         let operation = Task {
             let lease = try await coordinator.lease(id: environment.id)
@@ -66,8 +69,12 @@ final class RuntimeAdapterTests: XCTestCase {
         }
         await fulfillment(of: [started], timeout: 2)
         operation.cancel()
-        do { _ = try await coordinator.lease(id: environment.id); XCTFail("cancel released a live session") }
-        catch { XCTAssertEqual(error as? RuntimeError, .environmentBusy) }
+        do {
+            _ = try await coordinator.lease(id: environment.id)
+            XCTFail("cancel released a live session")
+        } catch {
+            XCTAssertEqual(error as? RuntimeError, .environmentBusy)
+        }
         let status = try await operation.value
         XCTAssertEqual(status, 7)
         _ = try await coordinator.lease(id: environment.id)
@@ -80,8 +87,12 @@ final class RuntimeAdapterTests: XCTestCase {
         try Data("#!/bin/sh\ntrap '' TERM\nwhile :; do :; done\n".utf8).write(to: executable)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
         let start = Date()
-        do { _ = try await RuntimeAdapter.probeExecutable(executable, timeout: 0.1); XCTFail("probe had no deadline") }
-        catch { XCTAssertLessThan(Date().timeIntervalSince(start), 5) }
+        do {
+            _ = try await RuntimeAdapter.probeExecutable(executable, timeout: 0.1)
+            XCTFail("probe had no deadline")
+        } catch {
+            XCTAssertLessThan(Date().timeIntervalSince(start), 5)
+        }
     }
 
     func testVersionProbeDeadlineIncludesInheritedPipes() async throws {
@@ -91,20 +102,30 @@ final class RuntimeAdapterTests: XCTestCase {
         try Data("#!/bin/sh\nsleep 2 &\nexit 0\n".utf8).write(to: executable)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
         let start = Date()
-        do { _ = try await RuntimeAdapter.probeExecutable(executable, timeout: 0.1); XCTFail("inherited pipe ignored deadline") }
-        catch { XCTAssertLessThan(Date().timeIntervalSince(start), 1.5) }
+        do {
+            _ = try await RuntimeAdapter.probeExecutable(
+            executable, timeout: 0.1)
+            XCTFail("inherited pipe ignored deadline")
+        } catch {
+            XCTAssertLessThan(Date().timeIntervalSince(start), 1.5)
+        }
     }
 
     func testInterruptedEnvironmentCannotBeLeasedAfterReopen() async throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let coordinator = try EnvironmentCoordinator(root: root)
-        let environment = try await coordinator.create(name: "crash", manifest: RuntimeFixture.manifest(), backend: .dxmt, synchronization: "none")
+        let environment = try await coordinator.create(
+            name: "crash", manifest: RuntimeFixture.manifest(), backend: .dxmt, synchronization: "none")
         var lease: EnvironmentLease? = try await coordinator.lease(id: environment.id)
-        try await coordinator.markStatus(.initializing, lease: lease!)
+        try await coordinator.markStatus(.initializing, lease: XCTUnwrap(lease))
         lease = nil
         let reopened = try EnvironmentCoordinator(root: root)
-        do { _ = try await reopened.lease(id: environment.id); XCTFail("interrupted session silently reused") }
-        catch { XCTAssertEqual(error as? RuntimeError, .environmentBusy) }
+        do {
+            _ = try await reopened.lease(id: environment.id)
+            XCTFail("interrupted session silently reused")
+        } catch {
+            XCTAssertEqual(error as? RuntimeError, .environmentBusy)
+        }
     }
 }

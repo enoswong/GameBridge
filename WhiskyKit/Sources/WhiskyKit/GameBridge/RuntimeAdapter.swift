@@ -4,8 +4,11 @@ import Foundation
 public struct LaunchRequest: Codable, Sendable {
     public let environmentID: String
     public let appID: UInt32?
-    public init(environmentID: String, appID: UInt32? = nil) {
-        self.environmentID = environmentID; self.appID = appID
+    public let verifyFiles: Bool?
+    public init(environmentID: String, appID: UInt32? = nil, verifyFiles: Bool = false) {
+        self.environmentID = environmentID
+        self.appID = appID
+        self.verifyFiles = verifyFiles ? true : nil
     }
 }
 public struct RunnerControlEvent: Codable, Sendable {
@@ -79,7 +82,8 @@ public enum RuntimeAdapter {
                 default: break
                 }
             }
-            guard status == 0, ProcessInfo.processInfo.systemUptime - startedAt < timeout else { throw RuntimeError.io("runtime version probe failed or exceeded its deadline") }
+            guard status == 0, ProcessInfo.processInfo.systemUptime - startedAt < timeout else {
+                throw RuntimeError.io("runtime version probe failed or exceeded its deadline") }
             return output.trimmingCharacters(in: .whitespacesAndNewlines)
         }.value
     }
@@ -88,7 +92,9 @@ public enum RuntimeAdapter {
     static func validateExecution(binding: RuntimeBinding, manifest: EngineManifest) throws {
         try binding.validate(against: manifest)
         guard manifest.backends == [binding.backend] else { throw RuntimeError.invalidManifest("ambiguous backend") }
-        guard (binding.backend == .wineD3D || (binding.backend == .dxmt && manifest.dxmtFileSHA256s != nil)), binding.synchronization == "none" else {
+        let isSupportedBackend = binding.backend == .wineD3D
+            || (binding.backend == .dxmt && manifest.dxmtFileSHA256s != nil)
+        guard isSupportedBackend, binding.synchronization == "none" else {
             throw RuntimeError.invalidManifest("Unsupported or unprovisioned backend/synchronization")
         }
     }
@@ -109,19 +115,25 @@ public enum RuntimeAdapter {
         let environment = lease.environment
         guard request.environmentID == environment.id, environment.status == .ready,
               let steamPath = environment.steamRelativePath else { throw RuntimeError.unboundEnvironment }
-        let command = try WindowsSteamCommand(prefix: environment.prefix, steamRelativePath: steamPath, appID: request.appID)
+        let command = try WindowsSteamCommand(
+            prefix: environment.prefix, steamRelativePath: steamPath, appID: request.appID,
+            verifyFiles: request.verifyFiles == true
+        )
         // Older containers predate bootstrap. Stage bundled fixes on normal launch too.
         try await confirmIdle(engine: engine, lease: lease)
         if try DeskrawlCompatibility.prepareBundled(prefix: environment.prefix, engineID: engine.manifest.id,
                                                     directory: BootstrapPayload.bundledDirectory()) {
             log("[GameBridge] Preparing bundled Deskrawl compatibility for this environment.\n")
-            try await runBootstrapTool(engine: engine, lease: lease,
-                arguments: ["reg", "add", "HKCU\\Software\\Wine\\AppDefaults\\Deskrawl.exe\\DllOverrides", "/v", "version", "/t", "REG_SZ", "/d", "native,builtin", "/f"], log: log)
+            try await runBootstrapTool(
+                engine: engine, lease: lease, arguments: DeskrawlCompatibility.registryArguments, log: log
+            )
         }
         let sessionID = UUID()
         control(RunnerControlEvent(sessionID: sessionID, kind: "prepared", processID: nil, exitStatus: nil))
-        let status = try await session(engine: engine, lease: lease, arguments: command.launchArguments(virtualDesktop: virtualDesktop),
-                                      sessionID: sessionID, traceWindowProcess: traceWindowProcess, control: control, log: log)
+        let status = try await session(
+            engine: engine, lease: lease, arguments: command.launchArguments(virtualDesktop: virtualDesktop),
+                                      sessionID: sessionID, traceWindowProcess: traceWindowProcess, control: control,
+                                          log: log)
         guard status == 0 else { throw RuntimeError.io("Windows Steam exited with status \(status)") }
     }
 
@@ -135,20 +147,24 @@ public enum RuntimeAdapter {
     static func runBootstrapTool(engine: InstalledEngine, lease: EnvironmentLease, arguments: [String],
                                  log: @escaping @Sendable (String) -> Void) async throws {
         let status = try await session(engine: engine, lease: lease, arguments: arguments, log: log)
-        guard status == 0 || status == 194 else { throw RuntimeError.io("Setup component exited with status \(status)") }
+        guard status == 0 || status == 194 else { throw RuntimeError.io(
+            "Setup component exited with status \(status)") }
     }
 
     public static func repairCommonComponent(_ component: CommonRuntimeComponent, engine: InstalledEngine,
                                              lease: EnvironmentLease, installer: URL, install: Bool = false,
                                              log: @escaping @Sendable (String) -> Void) async throws -> Int32 {
         try WindowsSteamCommand.validatePE(installer)
-        guard installer.lastPathComponent == URL(fileURLWithPath: component.relativeInstallerPath).lastPathComponent else {
+        guard installer.lastPathComponent == URL(
+            fileURLWithPath: component.relativeInstallerPath).lastPathComponent else {
             throw RuntimeError.io("Unexpected common component installer filename")
         }
         let status = try await session(engine: engine, lease: lease,
-                                       arguments: [installer.path] + (install ? component.installArguments : component.arguments), log: log)
+                                       arguments: [installer.path] + (
+                                           install ? component.installArguments : component.arguments), log: log)
         guard component.acceptsExitStatus(status) else {
-            throw RuntimeError.io("\(component.rawValue) installer exited with status \(status); inspect its installation log")
+            throw RuntimeError.io(
+                "\(component.rawValue) installer exited with status \(status); inspect its installation log")
         }
         return status
     }
@@ -183,14 +199,16 @@ public enum RuntimeAdapter {
             let status: Int32
             do {
                 status = try await execute(engine: engine, prefix: lease.environment.prefix,
-                                           arguments: arguments, sessionID: sessionID, traceWindowProcess: traceWindowProcess, control: control, log: log)
+                                           arguments: arguments, sessionID: sessionID,
+                                               traceWindowProcess: traceWindowProcess, control: control, log: log)
             } catch {
                 try await waitForEnvironment(engine: engine, prefix: lease.environment.prefix)
                 throw error
             }
             control(RunnerControlEvent(sessionID: sessionID, kind: "clientExited", processID: nil, exitStatus: status))
             try await waitForEnvironment(engine: engine, prefix: lease.environment.prefix)
-            control(RunnerControlEvent(sessionID: sessionID, kind: "environmentIdle", processID: nil, exitStatus: status))
+            control(RunnerControlEvent(
+                sessionID: sessionID, kind: "environmentIdle", processID: nil, exitStatus: status))
             return status
         }
     }
@@ -214,7 +232,8 @@ public enum RuntimeAdapter {
         process.currentDirectoryURL = prefix
         var environment = baseEnvironment()
         environment["WINEPREFIX"] = prefix.path
-        environment["WINEDEBUG"] = try debugChannels(dxmt: engine.manifest.backends == [.dxmt], traceProcess: traceWindowProcess)
+        environment["WINEDEBUG"] = try debugChannels(
+            dxmt: engine.manifest.backends == [.dxmt], traceProcess: traceWindowProcess)
         environment["WINEDLLOVERRIDES"] = dllOverrides(dxmt: engine.manifest.backends == [.dxmt])
         let compatibility = try DeskrawlCompatibility.environment(prefix: prefix, engineID: engine.manifest.id)
         if !compatibility.isEmpty {
@@ -225,7 +244,8 @@ public enum RuntimeAdapter {
         var status: Int32?
         for await event in try process.runStream(name: "windows-steam", fileHandle: nil) {
             switch event {
-            case .started(let child): control(RunnerControlEvent(sessionID: sessionID, kind: "clientStarted", processID: child.processIdentifier, exitStatus: nil))
+            case .started(let child): control(RunnerControlEvent(
+                sessionID: sessionID, kind: "clientStarted", processID: child.processIdentifier, exitStatus: nil))
             case .message(let text), .error(let text): log(text)
             case .terminated(let child): status = child.terminationStatus
             }
@@ -249,8 +269,10 @@ public enum RuntimeAdapter {
               name.unicodeScalars.allSatisfy({ allowed.contains($0) }) else {
             throw RuntimeError.io("Window trace requires an executable basename, for example Deskrawl.exe")
         }
-        // DWM transparency calls are often stubs: trace alone hides their FIXME evidence.
-        return normal + ["event", "win", "cursor", "msg", "rawinput", "ver", "dwmapi", "macdrv"].map { ",\(name):trace+\($0)" }.joined()
+        // DWM transparency calls are often stubs: trace alone hides those diagnostic messages.
+        return normal + [
+            "event", "win", "cursor", "msg", "rawinput", "ver", "dwmapi", "macdrv"].map {
+                ",\(name):trace+\($0)" }.joined()
             + ",\(name):fixme+dwmapi"
     }
     private static func waitForEnvironment(engine: InstalledEngine, prefix: URL) async throws {
@@ -268,7 +290,8 @@ public enum RuntimeAdapter {
     }
     private static func baseEnvironment() -> [String: String] {
         // Do not forward tokens, arbitrary DYLD injection, or the entire parent environment.
-        var environment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": FileManager.default.homeDirectoryForCurrentUser.path]
+        var environment = [
+            "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": FileManager.default.homeDirectoryForCurrentUser.path]
         for key in ["TMPDIR", "LANG", "LC_ALL", "DISPLAY"] {
             if let value = ProcessInfo.processInfo.environment[key] { environment[key] = value }
         }

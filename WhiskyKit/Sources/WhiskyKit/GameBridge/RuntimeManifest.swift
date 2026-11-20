@@ -60,20 +60,22 @@ public struct EngineManifest: Codable, Equatable, Sendable {
     public var toolchain: String
     public var dependencySHA256s: [String: String]
     public var testReferences: [String]
-    public var dxmtFileSHA256s: [String: String]? = nil
+    public var dxmtFileSHA256s: [String: String]?
     public var distribution: RuntimeDistribution
 
     public func validate() throws {
         guard schemaVersion == 1 else { throw RuntimeError.invalidManifest("schemaVersion") }
         try ManagedPath.validateID(id)
         if let hashes = dxmtFileSHA256s {
-            guard Set(hashes.keys) == Set(DXMTProvisioner.requiredPaths), hashes.values.allSatisfy(DigestTools.isSHA256) else {
+            guard Set(hashes.keys) == Set(
+                DXMTProvisioner.requiredPaths), hashes.values.allSatisfy(DigestTools.isSHA256) else {
                 throw RuntimeError.invalidManifest("DXMT file hashes")
             }
         }
         guard !version.isEmpty, OSVersion(minimumMacOS) != nil, !toolchain.isEmpty,
               !backends.isEmpty, Set(backends).count == backends.count,
-              !synchronizationModes.isEmpty, synchronizationModes.allSatisfy({ ["none", "esync", "msync"].contains($0) }),
+              !synchronizationModes.isEmpty, synchronizationModes.allSatisfy(
+                  { ["none", "esync", "msync"].contains($0) }),
               archiveBytes > 0, archiveBytes <= 8 * 1024 * 1024 * 1024,
               unpackedBytes > 0, unpackedBytes <= 64 * 1024 * 1024 * 1024,
               DigestTools.isSHA256(archiveSHA256),
@@ -102,7 +104,8 @@ public struct OSVersion: Comparable, Sendable {
     public let patch: Int
     public init?(_ text: String) {
         let components = text.split(separator: ".", omittingEmptySubsequences: false)
-        guard (2...3).contains(components.count), components.allSatisfy({ !$0.isEmpty && $0.allSatisfy({ $0.isASCII && $0.isNumber }) }),
+        guard (2...3).contains(components.count), components.allSatisfy(
+            { !$0.isEmpty && $0.allSatisfy({ $0.isASCII && $0.isNumber }) }),
               let major = Int(components[0]), let minor = Int(components[1]),
               let patch = components.count == 3 ? Int(components[2]) : 0 else { return nil }
         self.major = major; self.minor = minor; self.patch = patch
@@ -116,7 +119,8 @@ public enum ManagedPath {
     public static func validateID(_ id: String) throws {
         guard (1...128).contains(id.utf8.count), let first = id.utf8.first,
               (48...57).contains(first) || (65...90).contains(first) || (97...122).contains(first),
-              id.utf8.allSatisfy({ (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || [45, 46, 95].contains($0) })
+              id.utf8.allSatisfy({ (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || [45,
+                  46, 95].contains($0) })
         else { throw RuntimeError.unsafePath(id) }
     }
     public static func validateRelative(_ path: String) throws {
@@ -141,7 +145,8 @@ public enum ManagedPath {
 }
 
 public enum DigestTools {
-    public static func sha256(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+    public static func sha256(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x",
+        $0) }.joined() }
     public static func isSHA256(_ value: String) -> Bool {
         value.count == 64 && value.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }
     }

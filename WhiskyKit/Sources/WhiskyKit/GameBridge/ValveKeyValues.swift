@@ -2,7 +2,8 @@
 import Foundation
 
 public enum SteamMetadataError: Error, Equatable, LocalizedError {
-    case malformed, tooLarge, tooDeep, missingField(String), duplicateKey(String), unavailable(String), notWindowsExecutable
+    case malformed, tooLarge, tooDeep, missingField(String), duplicateKey(String), unavailable(String),
+        notWindowsExecutable
     public var errorDescription: String? {
         switch self {
         case .malformed: return "Steam metadata is incomplete or malformed. Try again after Steam finishes updating."
@@ -10,7 +11,9 @@ public enum SteamMetadataError: Error, Equatable, LocalizedError {
         case .missingField(let key): return "Steam metadata is missing \(key)."
         case .duplicateKey(let key): return "Steam metadata contains conflicting entries for \(key)."
         case .unavailable(let path): return "Steam library is unavailable: \(path)."
-        case .notWindowsExecutable: return "Select the official Windows Steam.exe inside this environment. A native Mac client cannot validate Windows compatibility."
+        case .notWindowsExecutable:
+            return "Select the official Windows Steam.exe inside this environment. "
+                + "A native Mac client cannot validate Windows compatibility."
         }
     }
 }
@@ -55,7 +58,8 @@ private struct KeyValuesParser {
                 guard nested else { throw SteamMetadataError.malformed }
                 return ValveKeyValues(values: values)
             }
-            guard case .text(let rawKey) = token, !rawKey.isEmpty, let value = try next() else { throw SteamMetadataError.malformed }
+            guard case .text(let rawKey) = token, !rawKey.isEmpty, let value = try next() else {
+                throw SteamMetadataError.malformed }
             let key = rawKey.lowercased()
             guard values[key] == nil else { throw SteamMetadataError.duplicateKey(key) }
             switch value {
@@ -68,6 +72,22 @@ private struct KeyValuesParser {
         return ValveKeyValues(values: values)
     }
     mutating func next() throws -> Token? {
+        skipTrivia()
+        guard position < characters.count else { return nil }
+        tokens += 1
+        guard tokens <= 500_000 else { throw SteamMetadataError.tooLarge }
+        let first = characters[position]
+        position += 1
+        switch first {
+        case "{": return .open
+        case "}": return .close
+        case "\"": return try readQuoted()
+        case "#", "[": throw SteamMetadataError.malformed
+        default: return readUnquoted(startingWith: first)
+        }
+    }
+
+    private mutating func skipTrivia() {
         while position < characters.count {
             if characters[position].isWhitespace || characters[position] == "\u{feff}" { position += 1; continue }
             if characters[position] == "/", position + 1 < characters.count, characters[position + 1] == "/" {
@@ -76,36 +96,34 @@ private struct KeyValuesParser {
             }
             break
         }
-        guard position < characters.count else { return nil }
-        tokens += 1
-        guard tokens <= 500_000 else { throw SteamMetadataError.tooLarge }
-        let first = characters[position]
-        position += 1
-        if first == "{" { return .open }
-        if first == "}" { return .close }
-        if first == "\"" {
-            var result = ""
-            while position < characters.count {
-                let value = characters[position]; position += 1
-                if value == "\"" { return .text(result) }
-                if value == "\\" {
-                    guard position < characters.count else { throw SteamMetadataError.malformed }
-                    let escaped = characters[position]; position += 1
-                    switch escaped {
-                    case "\\", "\"": result.append(escaped)
-                    case "n": result.append("\n")
-                    case "t": result.append("\t")
-                    case "r": result.append("\r")
-                    default: result.append("\\"); result.append(escaped)
-                    }
-                } else { result.append(value) }
-            }
-            throw SteamMetadataError.malformed
+    }
+
+    private mutating func readQuoted() throws -> Token {
+        var result = ""
+        while position < characters.count {
+            let value = characters[position]; position += 1
+            if value == "\"" { return .text(result) }
+            if value == "\\" {
+                guard position < characters.count else { throw SteamMetadataError.malformed }
+                let escaped = characters[position]; position += 1
+                switch escaped {
+                case "\\", "\"": result.append(escaped)
+                case "n": result.append("\n")
+                case "t": result.append("\t")
+                case "r": result.append("\r")
+                default: result.append("\\"); result.append(escaped)
+                }
+            } else { result.append(value) }
         }
-        guard first != "#", first != "[" else { throw SteamMetadataError.malformed }
+        throw SteamMetadataError.malformed
+    }
+
+    private mutating func readUnquoted(startingWith first: Character) -> Token {
         var result = String(first)
-        while position < characters.count, !characters[position].isWhitespace, !["{", "}"].contains(characters[position]) {
-            result.append(characters[position]); position += 1
+        while position < characters.count,
+              !characters[position].isWhitespace, !["{", "}"].contains(characters[position]) {
+            result.append(characters[position])
+            position += 1
         }
         return .text(result)
     }

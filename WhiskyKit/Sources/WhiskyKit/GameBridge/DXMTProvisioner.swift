@@ -14,7 +14,8 @@ public enum DXMTProvisioner {
     }
     public static func validate(engine: InstalledEngine) throws {
         guard let hashes = engine.manifest.dxmtFileSHA256s,
-              Set(hashes.keys) == Set(requiredPaths) else { throw RuntimeError.invalidManifest("DXMT signed file inventory") }
+              Set(hashes.keys) == Set(requiredPaths) else {
+                  throw RuntimeError.invalidManifest("DXMT signed file inventory") }
         for path in requiredPaths {
             let file = try ManagedPath.child(path, under: engine.directory)
             let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
@@ -33,28 +34,44 @@ public enum DXMTProvisioner {
             }
         }
     }
+    private struct VerifiedCopy {
+        let source: URL
+        let destination: URL
+        let digest: String
+    }
+
     public static func provision(engine: InstalledEngine, prefix: URL) throws {
         try validate(engine: engine) // All sources checked before any prefix writes.
-        var copies: [(URL, URL, String)] = []
+        guard let hashes = engine.manifest.dxmtFileSHA256s else {
+            throw RuntimeError.invalidManifest("DXMT signed file inventory")
+        }
+        var copies: [VerifiedCopy] = []
         for (architecture, systemDirectory) in [("x64", "system32"), ("x32", "syswow64")] {
             let directory = try ManagedPath.child("drive_c/windows/" + systemDirectory, under: prefix)
             var isDirectory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory), isDirectory.boolValue else {
+            guard FileManager.default.fileExists(
+                atPath: directory.path, isDirectory: &isDirectory), isDirectory.boolValue else {
                 throw RuntimeError.io("Initialize Windows before provisioning DXMT")
             }
             for name in names {
                 let path = "Libraries/DXMT/\(architecture)/\(name)"
                 let source = try ManagedPath.child(path, under: engine.directory)
                 let destination = try ManagedPath.child("drive_c/windows/\(systemDirectory)/\(name)", under: prefix)
-                copies.append((source, destination, engine.manifest.dxmtFileSHA256s![path]!))
+                guard let digest = hashes[path] else {
+                    throw RuntimeError.invalidManifest("DXMT signed file inventory")
+                }
+                copies.append(VerifiedCopy(source: source, destination: destination, digest: digest))
             }
         }
-        for (source, destination, hash) in copies {
+        for copy in copies {
+            let destination = copy.destination
             if FileManager.default.fileExists(atPath: destination.path),
-               try DigestTools.sha256(file: destination, maximumBytes: 128 * 1024 * 1024).hash == hash { continue }
+               try DigestTools.sha256(file: destination, maximumBytes: 128 * 1024 * 1024).hash == copy.digest {
+                continue
+            }
             // Atomic replacement; interrupted multi-file application is safe to retry under lease.
-            try Data(contentsOf: source).write(to: destination, options: .atomic)
-            guard try DigestTools.sha256(file: destination, maximumBytes: 128 * 1024 * 1024).hash == hash else {
+            try Data(contentsOf: copy.source).write(to: destination, options: .atomic)
+            guard try DigestTools.sha256(file: destination, maximumBytes: 128 * 1024 * 1024).hash == copy.digest else {
                 throw RuntimeError.archiveHashMismatch
             }
         }

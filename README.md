@@ -6,9 +6,7 @@ GameBridge 是基於 [Whisky](https://github.com/Whisky-App/Whisky) 開發的 ma
 
 目標是讓你透過一次設定，準備 Windows Steam、必要元件及適用的相容性修正，之後直接從 GameBridge 開啟 Steam 安裝和遊玩 Windows 遊戲。
 
-> **目前下載狀態（2026-10-04）：GitHub 已提供源碼預覽版，完整應用程式安裝包尚未公開上架。** 下方操作教學適用於附有一鍵設定資源的 GameBridge 測試包。只有源碼或沒有執行引擎的自行建置版本，不能直接完成整套安裝。
->
-> 預定公開測試包採用**未經 Apple Developer ID 簽署及公證**的發佈方式。引擎來源、第三方授權及公開套件驗證仍在整理；請以 [Releases](https://github.com/enoswong/GameBridge/releases) 實際提供的資產和版本說明為準。
+> **下載狀態：** [Releases](https://github.com/enoswong/GameBridge/releases) 提供源碼預覽及未經公證的 0.1.0 開發預覽。下方介面教學適用於含一鍵設定資源及新版主畫面的建置。正式安裝包的引擎來源、授權及實機驗證仍在整理。
 
 ## 目錄
 
@@ -82,13 +80,9 @@ GameBridge 是基於 [Whisky](https://github.com/Whisky-App/Whisky) 開發的 ma
 
 ## 首次一鍵設定
 
-在 GameBridge 的 **「GameBridge · Windows Steam」** 設定畫面：
-
-1. 在「首次使用」區域按 **「閱讀 Microsoft 元件條款」**。
-2. 閱讀後，如接受條款，勾選 **「我已閱讀並接受 Microsoft 元件授權條款」**。
-3. 按 **「一鍵準備 Windows Steam」**。
-4. 等候執行記錄更新；期間保持網絡連線，不要移動環境資料夾或重複啟動安裝。
-5. 完成後 Windows Steam 會開啟；依 Steam 提示完成更新、登入及帳號驗證。
+1. 在 GameBridge 主畫面按 **「開始設定」**。如果畫面提示需要 Rosetta，先按 macOS 指示安裝。
+2. 閱讀 Microsoft 元件條款，接受後按 **「同意並開始」**。
+3. 等候畫面顯示各階段進度。Windows Steam 準備好後會自動開啟，請依 Steam 提示完成更新、登入及帳號驗證。
 
 這個流程會準備：
 
@@ -100,17 +94,15 @@ GameBridge 是基於 [Whisky](https://github.com/Whisky-App/Whisky) 開發的 ma
 
 Microsoft 元件與 Steam 安裝程式會從官方來源下載並檢查雜湊值；登入、購買遊戲及必要的發行商確認仍由你完成。遊戲自身的額外依賴可能仍需另行安裝。
 
-**安裝中斷時：**查看「執行記錄」，排除網絡或空間問題後，再按一鍵準備重試。流程會依已記錄的完成階段繼續。若環境仍被 Steam 使用，先正常退出 Steam。
+**安裝中斷時：**排除網絡或空間問題後，按「繼續設定」。GameBridge 會沿用已記錄的進度。「進階設定」內可查看執行記錄。
 
-**看不到「首次使用」區域時：**目前 app 可能沒有內建設定資源。只有源碼建置成功不代表已有完整引擎；請核對下載版本，而不是反覆建立空環境。
+**畫面顯示版本缺少元件時：**請到 Releases 核對下載版本。自建的源碼版本需要另備設定資源。
 
 ## 安裝與遊玩 Windows 遊戲
 
-1. 在 GameBridge 選擇已完成設定的「Windows 環境」。
-2. 按 **「開啟 Windows Steam」**。
-3. 在這個 Steam 視窗登入自己的帳號，前往收藏庫。
-4. 選擇遊戲，按 Steam 的「安裝」，先使用該環境內的預設安裝位置。
-5. 等待下載與遊戲必要元件安裝完成，再按「開始遊戲」。
+1. 從 GameBridge 按 **「開啟 Steam」**，用自己的帳號登入。
+2. 在 Steam 收藏庫選擇遊戲，安裝到預設位置。
+3. 下載完成後可直接從 Steam 遊玩。退出 Steam 後，已安裝的遊戲會列在 GameBridge 主畫面。
 
 **請使用 GameBridge 開啟的 Windows Steam 安裝 Windows 版本。** macOS Steam 已下載的 Mac 版遊戲不會自動變成 Windows 版。即使同一遊戲同時提供 Mac／Windows 版本，也應確認是在 Windows Steam 內安裝和啟動。
 
@@ -120,15 +112,23 @@ Microsoft 元件與 Steam 安裝程式會從官方來源下載並檢查雜湊值
 
 ## 日常啟動與退出
 
-以後遊玩毋須重新安裝：
+開啟 GameBridge，在已安裝的遊戲旁按 **「玩」**。如果發現缺少支援的 Microsoft 共用元件，會先在所選 Windows 環境安裝，再繼續啟動。Steam 標記檔案缺失或損壞，或本機遊戲資料夾遺失或空白時，GameBridge 會請 Windows Steam 驗證及重新下載。請在 Steam 查看修復進度，完成後便可在 Steam 啟動遊戲。
 
-1. 開啟 GameBridge。
-2. 在側邊欄或「Windows 環境」選單選擇原本安裝遊戲的環境。
-3. 按「開啟 Windows Steam」，再從 Steam 收藏庫啟動遊戲。
+如果已有 Steam 在執行，可在 Steam 收藏庫切換遊戲。GameBridge 顯示 **「驗證遊戲檔案」** 時，可以直接由該按鈕將上次選取的遊戲交給 Windows Steam 驗證。
 
 結束時先在遊戲內存檔並退出，再從 **Windows Steam 的「Steam → 結束」** 退出。只關閉 Steam 視窗，程式可能仍在背景執行。
 
 更新 GameBridge、移除環境或恢復狀態前，也應先完成上述退出流程。建議保留正常的 GameBridge → Windows Steam → 遊戲啟動方式，讓適用的相容性設定一併載入。
+
+### 舊遊戲檔案與元件
+
+在 GameBridge 主畫面開啟 **「舊遊戲檔案與元件」**，可檢查已安裝的 Windows Steam 遊戲，或選擇獨立 Windows 遊戲資料夾。有已初始化的 Windows 環境時，選擇獨立遊戲資料夾後會安裝偵測到缺少的 Microsoft 共用元件。報告列出 x86／x64 EXE 和 DLL 宣告的共用依賴，以及在執行檔旁邊或對應 Wine 系統目錄未找到的匯入項目。每個遊戲目錄最多檢查 2,048 個二進位檔，可單獨選擇子目錄再查。執行時才載入的檔案、遊戲資料與原裝檔案的完整性由遊戲發行來源核對。
+
+如要補上舊版 Visual C++，先退出遊戲與 Steam，再按 **「預先補齊 Visual C++」**。GameBridge 在所選環境內執行 Microsoft 提供的 2005、2008、2010、2012、2013 x86／x64 安裝器，逐個驗證 SHA-256 並記錄已完成的安裝。請在各安裝器視窗閱讀授權條款並完成安裝。需要重裝時按 **「重新安裝 Visual C++」**。Visual C++ v14 和 DirectX June 2010 由現有設定或修復流程處理。
+
+Steam 遊戲原裝檔案缺失時，從遊戲的 **內容 → 已安裝檔案** 執行[驗證遊戲檔案的完整性](https://help.steampowered.com/en/faqs/view/0C48-FCBD-DA71-93EB)。獨立 Windows 遊戲可用原本的安裝程式、發行商補丁或商店的修復功能。
+
+命令列可用 `runtime audit-legacy --environment <ID>` 掃描 Steam 遊戲，或用 `--game-directory <路徑>` 指定獨立遊戲目錄。用 `runtime prepare-legacy --environment <ID>` 安裝舊版 Visual C++，有需要時可加 `--reinstall`。
 
 ## 容器管理與資料位置
 
@@ -179,8 +179,8 @@ Windows 安裝視窗中的 `C:` 是容器磁碟，不是 macOS「應用程式」
 | 問題 | 處理方式 |
 | --- | --- |
 | 下載後只有程式碼，沒有 app | 你下載的是源碼包。到 Releases 確認是否已有應用程式資產；目前公開版本仍是源碼預覽 |
-| 沒有一鍵準備按鈕／顯示沒有已驗證引擎 | 檢查是否使用包含設定資源的版本。一般源碼建置不會自動提供完整執行引擎 |
-| 一鍵準備按鈕不能按 | 先閱讀並接受 Microsoft 元件條款，並確認沒有另一個準備作業正在執行 |
+| 沒有開始設定按鈕／顯示缺少元件 | 檢查是否使用包含設定資源的版本。若畫面提示 Rosetta，先依指引安裝 |
+| 設定中斷 | 查看主畫面的進度或提示，排除問題後按「繼續設定」 |
 | 安裝下載失敗或雜湊不符 | 檢查網絡、磁碟空間及執行記錄；重試仍失敗便回報。不要自行略過驗證或換入來源不明的 DLL |
 | 新容器缺少之前安裝的 DLL | 元件是按容器安裝。確認使用完成一鍵設定的環境；單按「建立 Windows 環境」不會複製舊容器的元件 |
 | 遊戲提示缺少 Visual C++ | 確認遊戲位於完成必要元件安裝的同一環境。仍出錯時記錄完整提示及環境引擎版本 |

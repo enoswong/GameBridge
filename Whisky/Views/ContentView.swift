@@ -38,20 +38,23 @@ struct ContentView: View {
     @State private var bottleFilter = ""
     @State private var managedEnvironments: [RuntimeEnvironment] = []
     @State private var managedError = ""
+    @State private var navigationColumns: NavigationSplitViewVisibility = .detailOnly
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $navigationColumns) {
             sidebar
         } detail: {
             detail
         }
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showSetup = true
-                } label: {
-                    Image(systemName: "plus")
-                        .help("button.createBottle")
+            if navigationColumns != .detailOnly {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showSetup = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .help("button.createBottle")
+                    }
                 }
             }
             ToolbarItem(placement: .primaryAction) {
@@ -78,7 +81,10 @@ struct ContentView: View {
             BottleCreationView(newlyCreatedBottleURL: $newlyCreatedBottleURL)
         }
         .sheet(isPresented: $showSetup) {
-            SetupView(showSetup: $showSetup, firstTime: false)
+            ScrollView {
+                SetupView(showSetup: $showSetup, firstTime: false)
+            }
+            .frame(width: 680, height: 420)
         }
         .sheet(item: $openedFileURL) { url in
             FileOpenView(fileURL: url,
@@ -97,20 +103,16 @@ struct ContentView: View {
             openedFileURL = url
         }
         .task {
-            await refreshManagedEnvironments()
             bottleVM.loadBottles()
+            selected = selectedBottleURL
+            await refreshManagedEnvironments()
+            if managedEnvironments.count > 1 || !bottleVM.bottles.isEmpty {
+                navigationColumns = .all
+            }
             bottlesLoaded = true
 
-            if !bottleVM.bottles.isEmpty || bottleVM.countActive() != 0 {
-                if let bottle = bottleVM.bottles.first(where: { $0.url == selectedBottleURL && $0.isAvailable }) {
-                    selected = bottle.url
-                } else {
-                    selected = bottleVM.bottles[0].url
-                }
-            }
-
-            if selected == nil { selected = managedEnvironments.first?.prefix }
-            if !managedEnvironments.isEmpty { return }
+            if selected == nil { selected = bottleVM.bottles.first(where: { $0.isAvailable })?.url }
+            if !managedEnvironments.isEmpty || bottleVM.bottles.isEmpty { return }
             if !WhiskyWineInstaller.isWhiskyWineInstalled() {
                 showSetup = true
             }
@@ -137,10 +139,11 @@ struct ContentView: View {
                 }
             }
         }
-        .task {
+        .task(id: bottlesLoaded) {
+            guard bottlesLoaded else { return }
             while !Task.isCancelled {
-                await refreshManagedEnvironments()
                 do { try await Task.sleep(for: .seconds(3)) } catch { break }
+                await refreshManagedEnvironments()
             }
         }
     }
@@ -149,11 +152,14 @@ struct ContentView: View {
         ScrollViewReader { proxy in
             List(selection: $selected) {
                 Section("Windows 環境") {
-                    ForEach(managedEnvironments.filter { bottleFilter.isEmpty || $0.name.localizedCaseInsensitiveContains(bottleFilter) }) { environment in
+                    let visibleEnvironments = managedEnvironments.filter {
+                        bottleFilter.isEmpty || $0.name.localizedCaseInsensitiveContains(bottleFilter)
+                    }
+                    ForEach(visibleEnvironments) { environment in
                         Label {
                             VStack(alignment: .leading) {
                                 Text(environment.name)
-                                Text(environment.status == .running ? "執行中" : environment.status == .needsAttention ? "需要恢復" : "已建立")
+                                Text(managedStatusLabel(environment.status))
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                         } icon: { Image(systemName: "desktopcomputer") }
@@ -198,33 +204,24 @@ struct ContentView: View {
 
     @ViewBuilder
     var detail: some View {
-        if let bottle = selected {
-            if let environment = managedEnvironments.first(where: { $0.prefix == bottle }) {
-                ScrollView {
-                    SetupView(showSetup: $showSetup, firstTime: false, initialEnvironment: environment.id, embedded: true)
-                }.id(environment.id)
-            } else if let bottle = bottleVM.bottles.first(where: { $0.url == bottle }) {
-                BottleView(bottle: bottle)
-                    .disabled(bottle.inFlight)
-                    .id(bottle.url)
+        if let bottle = bottleVM.bottles.first(where: { $0.url == selected }) {
+            BottleView(bottle: bottle)
+                .disabled(bottle.inFlight)
+                .id(bottle.url)
+        } else if bottlesLoaded {
+            ScrollView {
+                SetupView(showSetup: $showSetup, firstTime: false,
+                          initialEnvironment: managedEnvironments.first(where: { $0.prefix == selected })?.id,
+                          embedded: true)
             }
-        } else {
-            if (bottleVM.bottles.isEmpty || bottleVM.countActive() == 0) && bottlesLoaded {
-                VStack {
-                    Text("main.createFirst")
-                    Button {
-                    showSetup = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "plus")
-                            Text("button.createBottle")
-                        }
-                        .padding(6)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.accentColor)
-                }
-            }
+        }
+    }
+
+    private func managedStatusLabel(_ status: EnvironmentStatus) -> String {
+        switch status {
+        case .running: return "執行中"
+        case .needsAttention: return "需要恢復"
+        default: return "已建立"
         }
     }
 
@@ -234,8 +231,11 @@ struct ContentView: View {
             managedEnvironments = try await coordinator.environments().sorted { $0.createdAt < $1.createdAt }
             managedError = ""
             if let selected, !managedEnvironments.contains(where: { $0.prefix == selected }),
-               !bottleVM.bottles.contains(where: { $0.url == selected }) { self.selected = nil }
-            if selected == nil { selected = managedEnvironments.first?.prefix }
+               !bottleVM.bottles.contains(where: { $0.url == selected && $0.isAvailable }) { self.selected = nil }
+            if selected == nil {
+                selected = managedEnvironments.first(where: { $0.steamRelativePath != nil })?.prefix
+                    ?? managedEnvironments.first?.prefix
+            }
         } catch { managedError = error.localizedDescription }
     }
 

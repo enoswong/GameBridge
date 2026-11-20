@@ -29,128 +29,62 @@ enum SetupStage {
 struct SetupView: View {
     @Binding var showSetup: Bool
     var firstTime: Bool = true
-    var initialEnvironment: String? = nil
+    var initialEnvironment: String?
     var embedded: Bool = false
-    @State private var engines: [InstalledEngine] = []
-    @State private var environments: [RuntimeEnvironment] = []
-    @State private var selectedEngine = ""
-    @State private var selectedEnvironment = ""
+    @State var engines: [InstalledEngine] = []
+    @State var environments: [RuntimeEnvironment] = []
+    @State var selectedEngine = ""
+    @State var selectedEnvironment = ""
     @State private var environmentName = "Windows Steam"
-    @State private var busy = false
-    @State private var message = ""
-    @State private var log = ""
+    @State var busy = false
+    @State var message = ""
+    @State var log = ""
     @AppStorage("GameBridge.steamInstallerDirectory") private var installerDirectory = ""
-    @State private var archived: [RuntimeEnvironment] = []
+    @State var archived: [RuntimeEnvironment] = []
     @State private var showRemoveConfirmation = false
-    @State private var operationID = UUID()
-    @State private var acceptTerms = false
+    @State var operationID = UUID()
+    @State private var acceptedTerms = false
     @State private var showTerms = false
+    @State var loaded = false
+    @State var loadFailed = false
+    @State var rosettaInstalled = Rosetta2.isRosettaInstalled
+    @State var bootstrapStage: BootstrapStage?
+    @State var gameLibrary: [SteamInstalledGame]?
+    @State var libraryEnvironment: String?
+    @State var lastLaunch: (environment: String, appID: UInt32?)?
+    @State var failedLaunchEnvironment: String?
 
-    private var selection: RuntimeEnvironment? { environments.first { $0.id == selectedEnvironment } }
+    var selection: RuntimeEnvironment? { environments.first { $0.id == selectedEnvironment } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("GameBridge · Windows Steam").font(.title2.bold())
-            Text("Windows 遊戲必須在 GameBridge 內的 Windows 版 Steam 安裝。Mac 版 Steam 的遊戲不會列入相容性驗收。")
-                .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            if let payload = BootstrapPayload.bundledDirectory() {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("首次使用").font(.headline)
-                    Text("自動準備 Windows Steam、VC++、DirectX 與遊戲相容性修正。需要網絡及足夠的磁碟空間。")
-                        .font(.callout).foregroundStyle(.secondary)
-                    Button("閱讀 Microsoft 元件條款") { showTerms = true }
-                    Toggle("我已閱讀並接受 Microsoft 元件授權條款", isOn: $acceptTerms)
-                    Button("一鍵準備 Windows Steam") {
-                        Task { await run(["bootstrap", "--accept-component-licenses"]) }
-                    }.buttonStyle(.borderedProminent).disabled(busy || !acceptTerms)
-                }
-                .sheet(isPresented: $showTerms) {
-                    VStack {
-                        ScrollView {
-                            Text(termsText(payload)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        Button("關閉") { showTerms = false }
-                    }.padding().frame(width: 680, height: 500)
-                }
-                Divider()
+            Text("Windows 遊戲").font(.title2.bold())
+            playerControls
+                .disabled(busy)
+            LegacyGameControls(environment: selection) { arguments in
+                let succeeded = await run(arguments)
+                return succeeded ? log : nil
             }
-            if engines.isEmpty {
-                Text("尚未安裝已驗證的執行引擎。正式引擎發佈仍在準備中。")
-            } else {
-                Picker("建立環境的引擎", selection: $selectedEngine) {
-                    ForEach(engines, id: \.manifest.id) { engine in
-                        Text(engine.manifest.version + (engine.manifest.distribution == .internalOnly ? " · 內部研究版" : ""))
-                            .tag(engine.manifest.id)
-                    }
-                }
-                HStack {
-                    TextField("環境名稱", text: $environmentName)
-                    Button("建立 Windows 環境") {
-                        Task { await run(["create-environment", "--engine", selectedEngine, "--name", environmentName, "--backend", engines.first(where: { $0.manifest.id == selectedEngine })?.manifest.backends.first?.rawValue ?? "wineD3D"]) }
-                    }.disabled(selectedEngine.isEmpty || environmentName.isEmpty)
-                    Button("檢查引擎") { Task { await run(["probe", "--engine", selectedEngine]) } }
-                }
-            }
-            if !environments.isEmpty {
-                Divider()
-                Picker("Windows 環境", selection: $selectedEnvironment) {
-                    ForEach(environments) { environment in
-                        Text(environment.name).tag(environment.id)
-                    }
-                }
-                if let selected = selection {
-                    Text("目前環境引擎：\(engines.first(where: { $0.manifest.id == selected.binding.engineID })?.manifest.version ?? selected.binding.engineID)")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Text(statusText(selected.status)).foregroundStyle(.secondary)
-                    HStack {
-                        Button("初始化") { Task { await run(["initialize", "--environment", selected.id]) } }
-                            .disabled(selected.status != .created)
-                        Button("安裝 Windows Steam…") { chooseSteamInstaller(for: selected.id) }
-                            .disabled(selected.status != .created && selected.status != .ready)
-                        Button("辨識已安裝的 Steam") { Task { await run(["attach-steam", "--environment", selected.id]) } }
-                            .disabled(selected.status != .created && selected.status != .ready)
-                        Button("開啟 Windows Steam") { Task { await run(["launch", "--environment", selected.id]) } }
-                            .disabled(selected.status != .ready)
-                    }
-                    HStack {
-                        Button("在 Finder 顯示") { NSWorkspace.shared.selectFile(selected.prefix.path, inFileViewerRootedAtPath: "") }
-                        Button("恢復環境狀態") { Task { await run(["recover", "--environment", selected.id]) } }
-                            .disabled(selected.status == .ready || selected.status == .created)
-                        Button("移除環境…", role: .destructive) { showRemoveConfirmation = true }
-                            .disabled(selected.status != .ready && selected.status != .created)
-                    }
-                }
-            }
-            if !archived.isEmpty {
-                DisclosureGroup("已移除的環境（可恢復）") {
-                    ForEach(archived) { item in
-                        HStack {
-                            Text(item.name)
-                            Spacer()
-                            Button("恢復") { Task { await run(["restore-environment", "--environment", item.id]) } }
-                        }
-                    }
-                }
-            }
-            Text("DXMT／DX11 遊戲相容性正在驗證；程序啟動不代表遊戲通過驗收。登入、授權與遊戲下載由 Windows Steam 處理。")
-                .font(.caption).foregroundStyle(.secondary)
+            .disabled(busy || !loaded)
             if busy {
-                HStack { ProgressView().controlSize(.small); Text("執行中。若已開啟 Windows Steam，請正常結束它以釋放環境。") }
+                HStack {
+                    ProgressView().controlSize(.small)
+                    Text(bootstrapStage.map(stageText) ?? "處理中…")
+                }
             }
             if !message.isEmpty { Text(message).font(.callout).textSelection(.enabled) }
-            if !log.isEmpty {
-                DisclosureGroup("執行記錄") {
-                    ScrollView { Text(log).font(.system(.caption, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
-                        .frame(height: 130)
-                }
+            DisclosureGroup("進階設定") {
+                VStack(alignment: .leading, spacing: 12) { advancedControls }
+                    .padding(.top, 8)
+                    .disabled(busy)
             }
-            HStack {
-                Button("重新整理") { Task { await refresh() } }
-                Spacer()
-                if !embedded { Button("關閉") { showSetup = false }.keyboardShortcut(.cancelAction) }
+            if !embedded {
+                Button("關閉") { showSetup = false }.keyboardShortcut(.cancelAction)
             }
         }
-        .padding(24).frame(width: 680)
+        .padding(24)
+        .frame(maxWidth: 680, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .task {
             selectedEnvironment = initialEnvironment ?? ""
             await refresh()
@@ -159,13 +93,242 @@ struct SetupView: View {
                 await refresh()
             }
         }
+        .onChange(of: initialEnvironment) { _, environment in
+            if let environment { selectedEnvironment = environment }
+        }
+        .sheet(isPresented: $showTerms) {
+            let terms = BootstrapPayload.bundledDirectory().flatMap(termsText)
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Microsoft 元件授權條款").font(.headline)
+                ScrollView {
+                    Text(terms ?? "授權條款無法載入，請重新安裝 GameBridge。")
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                HStack {
+                    Spacer()
+                    Button("取消") { showTerms = false }.keyboardShortcut(.cancelAction)
+                    Button("同意並開始") {
+                        acceptedTerms = true
+                        showTerms = false
+                        startBootstrap()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(terms == nil || busy)
+                }
+            }
+            .padding(24)
+            .frame(width: 640, height: 420)
+        }
         .confirmationDialog("移除「\(selection?.name ?? "")」？", isPresented: $showRemoveConfirmation) {
             Button("移除環境", role: .destructive) {
-                if let selected = selection { Task { await run(["archive-environment", "--environment", selected.id]) } }
+                if let selected = selection {
+                    Task { await run(["archive-environment", "--environment", selected.id]) }
+                }
             }
         } message: {
             Text("環境會從使用清單移除，遊戲安裝與存檔會保留。你可在「已移除的環境」恢復。")
         }
+    }
+
+    @ViewBuilder
+    private var playerControls: some View {
+        if !loaded {
+            ProgressView("正在檢查 Steam 設定…")
+        } else if loadFailed {
+            Button("重試") { Task { await refresh() } }
+                .buttonStyle(.borderedProminent)
+        } else if let selected = selection, selected.steamRelativePath != nil {
+            switch selected.status {
+            case .ready:
+                gameControls(for: selected)
+            case .running:
+                Text("Steam 正在執行。可在 Steam 收藏庫切換遊戲。")
+                    .foregroundStyle(.secondary)
+                Button("Steam 已關閉？重新檢查") {
+                    Task { await run(["recover", "--environment", selected.id]) }
+                }
+            case .created, .initializing, .needsAttention:
+                Text("上次的 Steam 設定或啟動未完成。").foregroundStyle(.secondary)
+                retryButton(for: selected)
+            }
+        } else if BootstrapPayload.bundledDirectory() != nil {
+            if rosettaInstalled {
+                Text("準備 Windows 版 Steam，之後用你的 Steam 帳號安裝遊戲。")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(acceptedTerms || selection != nil ? "繼續設定" : "開始設定") {
+                    if acceptedTerms {
+                        startBootstrap()
+                    } else {
+                        showTerms = true
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+            } else {
+                Text("請先安裝 Apple Rosetta。開啟一個 Intel 版 Mac App，然後按 macOS 提示安裝。")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let help = URL(string: "https://support.apple.com/zh-hk/102527") {
+                    Link("Apple Rosetta 安裝指引", destination: help)
+                }
+            }
+        } else {
+            Text("此版本未提供自動設定所需的元件。")
+                .foregroundStyle(.secondary)
+            if let releases = URL(string: "https://github.com/enoswong/GameBridge/releases") {
+                Link("查看 GameBridge 下載", destination: releases)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func gameControls(for environment: RuntimeEnvironment) -> some View {
+        if failedLaunchEnvironment == environment.id {
+            retryButton(for: environment)
+        }
+        if libraryEnvironment == environment.id, let gameLibrary {
+            if gameLibrary.isEmpty {
+                Text("在 Steam 登入後，將遊戲安裝到預設位置。")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(gameLibrary) { game in
+                    HStack {
+                        Text(game.name)
+                        Spacer()
+                        Button("玩") { Task { await launchSteam(in: environment.id, appID: game.appID) } }
+                            .buttonStyle(.borderedProminent)
+                            .accessibilityLabel("玩 \(game.name)")
+                    }
+                }
+            }
+        } else if libraryEnvironment == environment.id {
+            Text("暫時無法讀取遊戲清單。仍可從 Steam 開啟遊戲。").foregroundStyle(.secondary)
+        } else {
+            ProgressView("正在載入遊戲…")
+        }
+        Button("開啟 Steam") { Task { await launchSteam(in: environment.id) } }
+    }
+
+    private func retryButton(for environment: RuntimeEnvironment) -> some View {
+        let appID = lastLaunch?.environment == environment.id ? lastLaunch?.appID : nil
+        return Button(appID == nil ? "修復並重試" : "驗證遊戲檔案") {
+            Task {
+                if environment.status != .ready {
+                    guard await run(["recover", "--environment", environment.id]) else { return }
+                }
+                await launchSteam(in: environment.id, appID: appID, verifyFiles: appID != nil)
+            }
+        }
+        .buttonStyle(.borderedProminent)
+    }
+
+    private func termsText(_ payload: URL) -> String? {
+        let terms = ["microsoft-vc14-en.txt", "microsoft-directx-june2010-en.txt"].compactMap {
+            try? String(contentsOf: payload.appendingPathComponent("Terms/" + $0), encoding: .utf8)
+        }
+        guard terms.count == 2, terms.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
+            return nil
+        }
+        return terms.joined(separator: "\n\n────────────\n\n")
+    }
+
+    private func stageText(_ stage: BootstrapStage) -> String {
+        switch stage {
+        case .checkingRequirements: return "正在檢查安裝需求…"
+        case .preparingEnvironment: return "正在準備 Windows 遊戲環境…"
+        case .installingComponents: return "正在安裝遊戲所需的元件…"
+        case .installingSteam: return "正在安裝 Steam…"
+        case .finishing: return "正在完成相容性設定…"
+        }
+    }
+
+    private func startBootstrap() {
+        Task { await run(["bootstrap", "--accept-component-licenses", "--show-progress"]) }
+    }
+}
+
+extension SetupView {
+    @ViewBuilder
+    private var advancedControls: some View {
+        if engines.isEmpty {
+            Text("尚未安裝已驗證的執行引擎。正式引擎發佈仍在準備中。")
+        } else {
+            Picker("建立環境的引擎", selection: $selectedEngine) {
+                ForEach(engines, id: \.manifest.id) { engine in
+                    Text(engine.manifest.version + (
+                        engine.manifest.distribution == .internalOnly ? " · 內部研究版" : ""))
+                        .tag(engine.manifest.id)
+                }
+            }
+            HStack {
+                TextField("環境名稱", text: $environmentName)
+                Button("建立 Windows 環境") {
+                    let engine = engines.first { $0.manifest.id == selectedEngine }
+                    let backend = engine?.manifest.backends.first?.rawValue ?? "wineD3D"
+                    Task {
+                        await run([
+                            "create-environment", "--engine", selectedEngine, "--name", environmentName,
+                            "--backend", backend
+                        ])
+                    }
+                }.disabled(selectedEngine.isEmpty || environmentName.isEmpty)
+                Button("檢查引擎") { Task { await run(["probe", "--engine", selectedEngine]) } }
+            }
+        }
+        if !environments.isEmpty {
+            Divider()
+            Picker("Windows 環境", selection: $selectedEnvironment) {
+                ForEach(environments) { environment in
+                    Text(environment.name).tag(environment.id)
+                }
+            }
+            if let selected = selection {
+                let engineID = selected.binding.engineID
+                let version = engines.first { $0.manifest.id == engineID }?.manifest.version ?? engineID
+                Text("目前環境引擎：\(version)")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text(statusText(selected.status)).foregroundStyle(.secondary)
+                HStack {
+                    Button("初始化") { Task { await run(["initialize", "--environment", selected.id]) } }
+                        .disabled(selected.status != .created)
+                    Button("安裝 Windows Steam…") { chooseSteamInstaller(for: selected.id) }
+                        .disabled(selected.status != .created && selected.status != .ready)
+                    Button("辨識已安裝的 Steam") { Task { await run(["attach-steam", "--environment", selected.id]) } }
+                        .disabled(selected.status != .created && selected.status != .ready)
+                    Button("開啟 Windows Steam") { Task { await launchSteam(in: selected.id) } }
+                        .disabled(selected.status != .ready)
+                }
+                HStack {
+                    Button("在 Finder 顯示") { NSWorkspace.shared.selectFile(
+                        selected.prefix.path, inFileViewerRootedAtPath: "") }
+                    Button("恢復環境狀態") { Task { await run(["recover", "--environment", selected.id]) } }
+                        .disabled(selected.status == .ready || selected.status == .created)
+                    Button("移除環境…", role: .destructive) { showRemoveConfirmation = true }
+                        .disabled(selected.status != .ready && selected.status != .created)
+                }
+            }
+        }
+        if !archived.isEmpty {
+            DisclosureGroup("已移除的環境（可恢復）") {
+                ForEach(archived) { item in
+                    HStack {
+                        Text(item.name)
+                        Spacer()
+                        Button("恢復") { Task { await run(["restore-environment", "--environment", item.id]) } }
+                    }
+                }
+            }
+        }
+        if !log.isEmpty {
+            DisclosureGroup("執行記錄") {
+                ScrollView { Text(log).font(.system(
+                    .caption, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity,
+                    alignment: .leading) }
+                    .frame(height: 130)
+            }
+        }
+        Button("重新整理") { Task { await refresh() } }
     }
 
     @MainActor private func chooseSteamInstaller(for environmentID: String) {
@@ -194,12 +357,6 @@ struct SetupView: View {
         }
     }
 
-    private func termsText(_ payload: URL) -> String {
-        ["microsoft-vc14-en.txt", "microsoft-directx-june2010-en.txt"].map {
-            (try? String(contentsOf: payload.appendingPathComponent("Terms/" + $0), encoding: .utf8)) ?? "授權條款無法載入，請重新安裝 GameBridge。"
-        }.joined(separator: "\n\n────────────\n\n")
-    }
-
     private func statusText(_ status: EnvironmentStatus) -> String {
         switch status {
         case .created: return "環境已建立；可初始化及安裝 Windows Steam。"
@@ -207,65 +364,5 @@ struct SetupView: View {
         case .running, .initializing: return "環境正在使用中；若上次執行中斷，需要先確認 Windows 程序已停止。"
         case .needsAttention: return "上次執行未完成，需要檢查記錄及恢復環境。"
         }
-    }
-
-    @MainActor private func refresh() async {
-        do {
-            let store = try EngineStore(root: GameBridgePaths.dataRoot, trustedKeys: [:])
-            engines = try await store.installedEngines()
-            let coordinator = try EnvironmentCoordinator(root: GameBridgePaths.dataRoot)
-            environments = try await coordinator.environments()
-            archived = try await coordinator.archivedEnvironments()
-            if !engines.contains(where: { $0.manifest.id == selectedEngine }) { selectedEngine = engines.first?.manifest.id ?? "" }
-            if !environments.contains(where: { $0.id == selectedEnvironment }) { selectedEnvironment = environments.last?.id ?? "" }
-        } catch { message = error.localizedDescription }
-    }
-
-    @MainActor private func run(_ arguments: [String]) async {
-        guard !busy, let executable = Bundle.main.url(forResource: "WhiskyCmd", withExtension: nil) else {
-            message = "找不到執行輔助程式。"; return
-        }
-        busy = true; message = ""; log = ""
-        let operation = UUID()
-        operationID = operation
-        defer { if operationID == operation { busy = false } }
-        do {
-            let process = Process()
-            process.executableURL = executable
-            process.arguments = ["runtime"] + arguments
-            var status: Int32?
-            var preparedEnvironment: String?
-            for await event in try process.runStream(name: "GameBridge helper", fileHandle: nil) {
-                switch event {
-                case .message(let text), .error(let text):
-                    if operationID == operation {
-                        log = String((log + text).suffix(16000))
-                        if arguments.first == "bootstrap" {
-                            for line in log.split(separator: "\n").reversed() {
-                                if let result = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
-                                   let id = result["id"] as? String { preparedEnvironment = id; break }
-                            }
-                        }
-                        // The helper owns the session lease. Once prepared, allow browsing
-                        // and managing other environments while Steam keeps running.
-                        if arguments.first == "launch", text.contains("\"kind\":\"prepared\"") {
-                            busy = false
-                            await refresh()
-                        }
-                    }
-                case .terminated(let child): status = child.terminationStatus
-                default: break
-                }
-            }
-            if operationID == operation {
-                message = status == 0 ? "操作已完成。" : "操作未完成，請查看執行記錄。"
-            }
-            await refresh()
-            if arguments.first == "bootstrap", status == 0, let id = preparedEnvironment {
-                selectedEnvironment = id
-                busy = false
-                await run(["launch", "--environment", id])
-            }
-        } catch { if operationID == operation { message = error.localizedDescription } }
     }
 }
