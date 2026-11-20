@@ -41,4 +41,15 @@ final class BootstrapTests: XCTestCase {
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: path)
         XCTAssertThrowsError(try BootstrapInstaller.matches(link, digest: DigestTools.sha256(bytes), maximumBytes: 100))
     }
+
+    func testOversizedCacheEntryIsTreatedAsUnusable() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let path = root.appending(path: "SteamSetup.exe")
+        let bytes = Data(repeating: 0x41, count: 32)
+        try bytes.write(to: path)
+
+        let matches = try BootstrapInstaller.matches(path, digest: DigestTools.sha256(bytes), maximumBytes: 16)
+        XCTAssertFalse(matches)
+    }
 }

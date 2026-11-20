@@ -64,6 +64,33 @@ final class SteamLibraryTests: XCTestCase {
         XCTAssertTrue(games.isEmpty)
     }
 
+    func testWindowsScanContinuesAfterAnUnsupportedLibraryEntry() throws {
+        let prefix = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: prefix) }
+        let steamRoot = prefix.appending(path: "drive_c/Program Files (x86)/Steam")
+        try writeWindowsSteam(to: steamRoot.appending(path: "Steam.exe"))
+        let defaultApps = steamRoot.appending(path: "steamapps")
+        let secondApps = prefix.appending(path: "drive_c/SecondLibrary/steamapps")
+        for apps in [defaultApps, secondApps] {
+            try FileManager.default.createDirectory(at: apps, withIntermediateDirectories: true)
+        }
+        let folders = defaultApps.appending(path: "libraryfolders.vdf")
+        try #"""
+        "libraryfolders" {
+            "0" { "path" "D:\\UnavailableLibrary" }
+            "1" { "path" "C:\\SecondLibrary" }
+        }
+        """#.write(to: folders, atomically: true, encoding: .utf8)
+        try #"""
+        "AppState" { "appid" "570" "name" "Demo" "installdir" "Demo" "StateFlags" "4" }
+        """#.write(to: secondApps.appending(path: "appmanifest_570.acf"), atomically: true, encoding: .utf8)
+
+        let snapshot = try SteamLibraryScanner.scanWindows(steamRoot: steamRoot, prefix: prefix)
+        XCTAssertEqual(snapshot.games.map(\.appID), [570])
+        XCTAssertEqual(snapshot.issues.count, 1)
+        XCTAssertEqual(snapshot.issues.first?.path, folders.path)
+    }
+
     func testManagedPlayLibraryListsOnlyCompleteGamesInTheDefaultLibrary() throws {
         let prefix = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: prefix) }
