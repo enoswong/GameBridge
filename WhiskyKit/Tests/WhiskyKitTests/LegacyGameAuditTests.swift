@@ -39,7 +39,7 @@ final class LegacyGameAuditTests: XCTestCase {
         XCTAssertEqual(imports.architecture, "x64")
         XCTAssertEqual(imports.libraries, ["msvcr120.dll", "xinput1_3.dll"])
         let audit = try LegacyGameAudit.scan(directory: root)
-        XCTAssertEqual(audit.unreadableExecutables, [broken.path])
+        XCTAssertEqual(audit.unreadableExecutables.map { URL(fileURLWithPath: $0).lastPathComponent }, ["broken.dll"])
         XCTAssertEqual(audit.unresolvedImports.count, 2)
     }
 

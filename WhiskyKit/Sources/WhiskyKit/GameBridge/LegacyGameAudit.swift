@@ -68,14 +68,13 @@ public struct LegacyGameAudit: Encodable, Sendable {
         ]
         let prefixes = ["msvcr", "msvcp", "msvcm", "mfc", "mfcm", "atl", "vcomp", "vcruntime", "concrt", "vccorlib"]
         let basename = String(name.lowercased().dropLast(4))
-        for (version, product) in families {
-            if prefixes.contains(where: { prefix in
+        let family = families.first { version, _ in
+            prefixes.contains { prefix in
                 let stem = prefix + version
                 return basename == stem || basename == stem + "u" || basename.hasPrefix(stem + "_")
-            }) {
-                return "Visual C++ " + product
             }
         }
+        if let family { return "Visual C++ " + family.1 }
         if ["d3dx9_", "d3dx10_", "d3dx11_", "xactengine", "x3daudio1_"].contains(where: basename.hasPrefix)
             || ["xinput1_3", "xaudio2_7", "d3dcompiler_43"].contains(basename) {
             return "DirectX June 2010"
