@@ -38,8 +38,9 @@ public struct SteamSessionMaintenance {
 
     private func repairIfAuthorized(_ audit: SteamLibraryPreflight) async throws -> Bool {
         guard shouldRepair else { return audit.hasUnresolvedImports }
+        let emit = announce
         let result = try await repair.installMissing(from: audit.reports) {
-            announce("repairingGameDependencies")
+            emit("repairingGameDependencies")
         }
         return !result.pending.isEmpty || result.reports.contains { !$0.unresolvedImports.isEmpty }
     }
