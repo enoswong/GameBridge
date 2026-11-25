@@ -42,18 +42,26 @@ public enum SteamLibraryScanner {
         try WindowsSteamCommand.validatePE(steamRoot.appending(path: "Steam.exe"))
         return try scan(steamRoot: steamRoot, prefix: prefix)
     }
-    /// The player view includes repairable games in the managed Steam installation’s default library.
+    /// The diagnostic view includes repairable games in the managed installation's default library.
     public static func scanLaunchableWindows(prefix: URL, steamRelativePath: String) throws -> [SteamInstalledGame] {
+        try scanManagedWindows(prefix: prefix, steamRelativePath: steamRelativePath).games
+    }
+
+    public static func scanManagedWindows(prefix: URL, steamRelativePath: String) throws -> SteamLibrarySnapshot {
         let command = try WindowsSteamCommand(prefix: prefix, steamRelativePath: steamRelativePath, appID: nil)
         let steamRoot = URL(fileURLWithPath: command.arguments[0]).deletingLastPathComponent()
         let apps = try ManagedPath.child("steamapps", under: steamRoot)
-        guard FileManager.default.fileExists(atPath: apps.path) else { return [] }
-        return try scan(steamRoot: steamRoot, prefix: prefix, includeAdditionalLibraries: false).games
+        guard FileManager.default.fileExists(atPath: apps.path) else {
+            return SteamLibrarySnapshot(games: [], issues: [], scannedAt: Date())
+        }
+        let snapshot = try scan(steamRoot: steamRoot, prefix: prefix, includeAdditionalLibraries: false)
+        let games = snapshot.games
             .filter { $0.isInstalledOrDamaged && $0.appID != 228980 }
             .sorted { lhs, rhs in
                 let order = lhs.name.localizedStandardCompare(rhs.name)
                 return order == .orderedSame ? lhs.appID < rhs.appID : order == .orderedAscending
             }
+        return SteamLibrarySnapshot(games: games, issues: snapshot.issues, scannedAt: snapshot.scannedAt)
     }
     private static func scan(
         steamRoot: URL, prefix: URL?, includeAdditionalLibraries: Bool = true
