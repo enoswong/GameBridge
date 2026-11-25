@@ -257,7 +257,14 @@ extension Whisky.Runtime {
                 let repair = GameFileRepair(
                     engine: installed, lease: lease, root: URL(fileURLWithPath: options.root), log: Self.log
                 )
+                let maintenance = SteamSessionMaintenance(
+                    repair: repair, shouldRepair: repairLibrary, announce: Self.announce
+                )
+                if appID == nil { try await maintenance.prepare(steamPath: steamPath) }
                 let verify = try await prepareGame(steamPath: steamPath, repair: repair)
+                let baseline = appID == nil ? maintenance.revisions(steamPath: steamPath) : nil
+                let observer = appID == nil ? maintenance.observe(steamPath: steamPath, baseline: baseline) : nil
+                defer { observer?.cancel() }
                 if verify { Self.announce("verifyingGameFiles") }
                 let request = LaunchRequest(environmentID: environment, appID: appID, verifyFiles: verify)
                 try await RuntimeAdapter.launch(
@@ -266,6 +273,12 @@ extension Whisky.Runtime {
                     control: { event in try? Whisky.Runtime.emit(event) },
                     log: Self.log
                 )
+                if let observer {
+                    observer.cancel()
+                    try await maintenance.finish(
+                        steamPath: steamPath, baseline: baseline, observedChange: await observer.value
+                    )
+                }
                 try await coordinator.markStatus(lease.environment.status, lease: lease)
             } catch {
                 try? await coordinator.markStatus(.needsAttention, lease: lease)
@@ -274,10 +287,7 @@ extension Whisky.Runtime {
         }
 
         private func prepareGame(steamPath: String, repair: GameFileRepair) async throws -> Bool {
-            guard let appID else {
-                try await prepareLibrary(steamPath: steamPath, repair: repair)
-                return false
-            }
+            guard let appID else { return false }
             if verifyFiles { return true }
             let prefix = repair.lease.environment.prefix
             let games = try? SteamLibraryScanner.scanLaunchableWindows(prefix: prefix, steamRelativePath: steamPath)
@@ -289,37 +299,6 @@ extension Whisky.Runtime {
             let result = try await repair.installMissing(from: [report]) { Self.announce("repairingGameDependencies") }
             Self.announce(result.pending.isEmpty ? "gameDependenciesReady" : "someDependenciesUnresolved")
             return false
-        }
-
-        private func prepareLibrary(steamPath: String, repair: GameFileRepair) async throws {
-            Self.announce("auditingSteamLibrary")
-            try await RuntimeAdapter.confirmIdle(engine: repair.engine, lease: repair.lease)
-            let prefix = repair.lease.environment.prefix
-            let audit: SteamLibraryPreflight
-            do {
-                audit = try SteamLibraryPreflight.scan(prefix: prefix, steamRelativePath: steamPath)
-            } catch {
-                try Task.checkCancellation()
-                Self.log("[GameBridge] Library audit unavailable: " + error.localizedDescription + "\n")
-                Self.announce("steamLibraryAuditNotice")
-                return
-            }
-            for issue in audit.issues { Self.log("[GameBridge] " + issue + "\n") }
-            for game in audit.damagedGames {
-                Self.log("[GameBridge] Steam file verification needed: " + game.name + "\n")
-            }
-            var unresolved = audit.hasUnresolvedImports
-            if repairLibrary {
-                let result = try await repair.installMissing(from: audit.reports) {
-                    Self.announce("repairingGameDependencies")
-                }
-                unresolved = !result.pending.isEmpty || result.reports.contains { !$0.unresolvedImports.isEmpty }
-            }
-            if unresolved || !audit.damagedGames.isEmpty || !audit.issues.isEmpty {
-                Self.announce("steamLibraryAuditNotice")
-            } else {
-                Self.announce("steamLibraryAuditFinished")
-            }
         }
 
         private static func announce(_ kind: String) {
