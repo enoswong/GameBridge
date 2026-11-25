@@ -33,6 +33,7 @@ git -C "$workspace" diff --cached --quiet HEAD --
 patches=(
     "$root/mobile/patches/0001-steam-first-research.patch"
     "$root/mobile/patches/0002-bootstrap-and-identity.patch"
+    "$root/mobile/patches/0003-runtime-preparation.patch"
 )
 if [[ "$research_ui" == 1 ]]; then
     # Validate the complete intended working tree against a temporary index.
@@ -47,6 +48,9 @@ if [[ "$research_ui" == 1 ]]; then
         git -C "$workspace" apply "${patches[@]}"
     fi
     GIT_INDEX_FILE="$index" git -C "$workspace" diff --quiet --ignore-submodules=all --
+    for name in RuntimeDependencyPolicy PortableWindowsImportReader PortableLegacyGameAudit SteamDirectoryAudit; do
+        cmp "$root/WhiskyKit/Sources/GameBridgeCore/$name.swift" "$workspace/app/Madeira/$name.swift"
+    done
 else
     git -C "$workspace" diff --quiet HEAD --
 fi
