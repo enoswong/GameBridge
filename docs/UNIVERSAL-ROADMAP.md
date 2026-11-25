@@ -16,6 +16,11 @@ The product is a transparent Windows Steam environment, not a replacement Steam 
 - Portable revision-change detection and regression tests.
 - Pinned mobile engine research checkout and build script; see [mobile research](MOBILE-RESEARCH.md). This does not yet integrate or build the mobile app.
 
+## Third iteration
+- Steam-first mobile research overlay connects the Open Steam button to Madeira's existing in-process desktop session (not Dock).
+- Separate pinned-source research workspace and patch validation in CI. No tested mobile IPA yet; client provisioning, bundle identity, CEF isolation and physical-device gates remain open.
+- Split macOS CLI state transitions and UI event handling to address strict lint complexity.
+
 ## Next engineering gates
 1. Verify all macOS builds, strict lint and regression tests. Real Mac: existing prefix, Steam login, download, update, launch, exit, and missing dependency case.
 2. Incremental audit cache keyed by engine version, game build and file metadata; process-level error collection and durable repair queue; manifest polling is implemented. Do not modify live DLLs or forcibly terminate Steam. Queue repairs for verified idle periods; validate safe retry and rollback.
