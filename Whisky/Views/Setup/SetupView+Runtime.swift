@@ -146,31 +146,24 @@ extension SetupView {
 
     @MainActor private func receiveLaunchEvent(_ event: RunnerControlEvent, operation: UUID) async {
         guard operationID == operation else { return }
-        switch event.kind {
-        case "postSteamMaintenance":
-            busy = true
-            message = "Steam 已退出，正在處理新安裝或更新的遊戲…"
-        case "auditingSteamLibrary":
-            message = "正在檢查已安裝的 Steam 遊戲…"
-        case "steamLibraryAuditNotice":
-            message = "部分遊戲需進一步檢查，可在進階設定查看記錄。"
-        case "steamLibraryAuditFinished":
-            message = "已完成本次依賴檢查，正在開啟 Steam。"
-        case "repairingGameDependencies":
-            message = "正在補齊遊戲所需元件…"
-        case "someDependenciesUnresolved":
-            message = "部份元件仍未齊全。遊戲會繼續由 Steam 啟動。"
-        case "verifyingGameFiles":
-            message = "Windows Steam 將驗證遊戲檔案，完成後可在 Steam 開始遊戲。"
-        case "gameDependenciesReady":
-            message = ""
-        case "clientStarted":
+        if event.kind == "clientStarted" {
             // The helper keeps its lease until Steam and Wine exit.
             await refresh()
             if operationID == operation { busy = false }
-        default:
-            break
+            return
         }
+        if event.kind == "postSteamMaintenance" { busy = true }
+        let messages = [
+            "postSteamMaintenance": "Steam 已退出，正在處理新安裝或更新的遊戲…",
+            "auditingSteamLibrary": "正在檢查已安裝的 Steam 遊戲…",
+            "steamLibraryAuditNotice": "部分遊戲需進一步檢查，可在進階設定查看記錄。",
+            "steamLibraryAuditFinished": "已完成本次依賴檢查。",
+            "repairingGameDependencies": "正在補齊遊戲所需元件…",
+            "someDependenciesUnresolved": "部份元件仍未齊全，請查看記錄。",
+            "verifyingGameFiles": "Windows Steam 將驗證遊戲檔案，完成後可在 Steam 開始遊戲。",
+            "gameDependenciesReady": ""
+        ]
+        if let status = messages[event.kind] { message = status }
     }
 
     private func readBootstrapEvent(_ line: Data, decoder: JSONDecoder) -> String? {
