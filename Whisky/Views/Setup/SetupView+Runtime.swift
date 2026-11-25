@@ -44,7 +44,8 @@ extension SetupView {
         lastLaunch = (environment, appID)
         failedLaunchEnvironment = nil
         let arguments = ["launch", "--environment", environment] + (appID.map { ["--app-id", String($0)] } ?? [])
-        await run(arguments + (verifyFiles ? ["--verify-files"] : []))
+        let libraryRepair = appID == nil && autoRepairLibrary ? ["--repair-library"] : []
+        await run(arguments + libraryRepair + (verifyFiles ? ["--verify-files"] : []))
     }
 
     @MainActor @discardableResult func run(_ arguments: [String]) async -> Bool {
@@ -146,6 +147,12 @@ extension SetupView {
     @MainActor private func receiveLaunchEvent(_ event: RunnerControlEvent, operation: UUID) async {
         guard operationID == operation else { return }
         switch event.kind {
+        case "auditingSteamLibrary":
+            message = "正在檢查已安裝的 Steam 遊戲…"
+        case "steamLibraryAuditNotice":
+            message = "部分遊戲需進一步檢查，可在進階設定查看記錄。"
+        case "steamLibraryAuditFinished":
+            message = "已完成本次依賴檢查，正在開啟 Steam。"
         case "repairingGameDependencies":
             message = "正在補齊遊戲所需元件…"
         case "someDependenciesUnresolved":
