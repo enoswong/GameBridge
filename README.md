@@ -80,7 +80,7 @@ GameBridge 是基於 [Whisky](https://github.com/Whisky-App/Whisky) 開發的 ma
 
 ## 首次一鍵設定
 
-1. 在 GameBridge 主畫面按 **「開始設定」**。如果畫面提示需要 Rosetta，先按 macOS 指示安裝。
+1. 在 GameBridge 主畫面按 **「開啟 Steam」**。如果畫面提示需要 Rosetta，先按 macOS 指示安裝。
 2. 閱讀 Microsoft 元件條款，接受後按 **「同意並開始」**。
 3. 等候畫面顯示各階段進度。Windows Steam 準備好後會自動開啟，請依 Steam 提示完成更新、登入及帳號驗證。
 
@@ -102,7 +102,7 @@ Microsoft 元件與 Steam 安裝程式會從官方來源下載並檢查雜湊值
 
 1. 從 GameBridge 按 **「開啟 Steam」**，用自己的帳號登入。
 2. 在 Steam 收藏庫選擇遊戲，安裝到預設位置。
-3. 下載完成後可直接從 Steam 遊玩。退出 Steam 後，已安裝的遊戲會列在 GameBridge 主畫面。
+3. 下載完成後可直接從 Steam 遊玩。已安裝遊戲清單僅在進階設定作診斷用途。
 
 **請使用 GameBridge 開啟的 Windows Steam 安裝 Windows 版本。** macOS Steam 已下載的 Mac 版遊戲不會自動變成 Windows 版。即使同一遊戲同時提供 Mac／Windows 版本，也應確認是在 Windows Steam 內安裝和啟動。
 
@@ -112,9 +112,11 @@ Microsoft 元件與 Steam 安裝程式會從官方來源下載並檢查雜湊值
 
 ## 日常啟動與退出
 
-開啟 GameBridge，在已安裝的遊戲旁按 **「玩」**。如果發現缺少支援的 Microsoft 共用元件，會先在所選 Windows 環境安裝，再繼續啟動。Steam 標記檔案缺失或損壞，或本機遊戲資料夾遺失或空白時，GameBridge 會請 Windows Steam 驗證及重新下載。請在 Steam 查看修復進度，完成後便可在 Steam 啟動遊戲。
+開啟 GameBridge，按 **「開啟 Steam」**，所有日常遊戲操作均在 Windows Steam 完成。啟動前 GameBridge 會掃描預設收藏庫中已安裝的遊戲，記錄缺失匯入項目、損壞標記及未完成的掃描。
 
-如果已有 Steam 在執行，可在 Steam 收藏庫切換遊戲。GameBridge 顯示 **「驗證遊戲檔案」** 時，可以直接由該按鈕將上次選取的遊戲交給 Windows Steam 驗證。
+若已閱讀並接受相關 Microsoft 元件授權條款，可啟用「自動補齊遊戲的 Microsoft 共用元件」一次；此選項會保留。支援的元件會在 Steam 尚未執行時補裝，並重新掃描。未啟用時只檢查，不安裝。部分舊版安裝器的條款及安裝行為仍需逐項驗證。
+
+若遊戲原裝檔案缺失或損壞，請使用 Steam 的完整性驗證；批量啟動前檢查目前只記錄這些問題，並不自動提出所有遊戲的驗證要求。在 Steam 執行期間新安裝或啟動的遊戲，仍待後續工作實現即時監察及安全修復。自動檢查範圍為預設收藏庫，每款遊戲仍受 2,048 個二進位檔掃描限制。
 
 結束時先在遊戲內存檔並退出，再從 **Windows Steam 的「Steam → 結束」** 退出。只關閉 Steam 視窗，程式可能仍在背景執行。
 
