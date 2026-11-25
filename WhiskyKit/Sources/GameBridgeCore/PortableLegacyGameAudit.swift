@@ -30,7 +30,8 @@ public struct PortableLegacyGameAudit: Encodable, Sendable {
         return lines.joined(separator: "\n")
     }
 
-    public static func scan(directory: URL, prefix: URL? = nil) throws -> Self {
+    public static func scan(directory: URL, prefix: URL? = nil, maxExecutables: Int = 2048) throws -> Self {
+        let limit = min(2048, max(1, maxExecutables))
         let directory = directory.standardizedFileURL.resolvingSymlinksInPath()
         let keys: [URLResourceKey] = [.isRegularFileKey, .isSymbolicLinkKey]
         guard directory.isFileURL, try directory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true,
@@ -50,12 +51,12 @@ public struct PortableLegacyGameAudit: Encodable, Sendable {
                 continue
             }
             visited += 1
-            if visited > 2048 { break }
+            if visited > limit { break }
             scan.inspect(file)
         }
         return Self(
             directory: directory, executablesScanned: scan.count, unreadableExecutables: scan.errors.sorted(),
-            scanLimitReached: visited > 2048, runtimeImports: scan.runtime.sorted(by: Self.order),
+            scanLimitReached: visited > limit, runtimeImports: scan.runtime.sorted(by: Self.order),
             unresolvedImports: scan.unresolved.sorted(by: Self.order)
         )
     }
