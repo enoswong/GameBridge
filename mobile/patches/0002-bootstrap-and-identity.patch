@@ -1,0 +1,148 @@
+diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
+--- a/app/Madeira/SteamRuntime.swift
++++ b/app/Madeira/SteamRuntime.swift
+@@ -325,6 +325,75 @@
+         await progress("Steam components are ready.")
+     }
+ 
+-    private static func hash(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
++    /// Desktop Steam uses only the pinned official bootstrapper, in its own client directory.
++    /// Valve's client, not the Dock host, performs subsequent updates and authentication.
++    func prepareDesktopBootstrap(prefix: URL) async throws {
++        guard !busy, wine_process_is_running() == 0, wineserver_is_running() == 0 else {
++            throw SteamRuntimeFiles.Failure.activeSession
++        }
++        busy = true
++        defer { busy = false }
++        let fm = FileManager.default
++        let prefix = prefix.resolvingSymlinksInPath().standardizedFileURL
++        let relative = "Program Files/Steam Big Picture/steam.exe"
++        let drive = prefix.appendingPathComponent("drive_c")
++        let target = try SteamRuntimeFiles.destination(relative, under: drive)
++        if fm.fileExists(atPath: target.path) {
++            let values = try target.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
++            guard values.isRegularFile == true, values.isSymbolicLink == false else {
++                throw SteamRuntimeFiles.Failure.conflict
++            }
++            return
++        }
++        guard let package = SteamRuntimeFiles.packages.first(where: { $0.file.hasPrefix("steam_win32.zip.") }),
++              let url = URL(string: SteamRuntimeFiles.origin + package.file) else {
++            throw SteamRuntimeFiles.Failure.invalidPackage
++        }
++        let configuration = URLSessionConfiguration.ephemeral
++        configuration.httpCookieStorage = nil
++        configuration.urlCredentialStorage = nil
++        configuration.timeoutIntervalForRequest = 60
++        configuration.timeoutIntervalForResource = 180
++        let session = URLSession(configuration: configuration, delegate: SteamRuntimeRedirects(), delegateQueue: nil)
++        defer { session.invalidateAndCancel() }
++        let (temporary, response) = try await session.download(from: url)
++        defer { try? fm.removeItem(at: temporary) }
++        guard let http = response as? HTTPURLResponse, http.statusCode == 200,
++              http.url?.host == url.host, http.url?.scheme == "https",
++              (try temporary.resourceValues(forKeys: [.fileSizeKey])).fileSize == package.bytes else {
++            throw SteamRuntimeFiles.Failure.invalidPackage
++        }
++        let archive = try Data(contentsOf: temporary, options: .mappedIfSafe)
++        guard Self.hash(archive) == package.sha256 else { throw SteamRuntimeFiles.Failure.invalidPackage }
++        var executable: Data?
++        try SteamRuntimeFiles.unpack(archive) { name, bytes in
++            if name == "steam.exe" {
++                guard executable == nil else { throw SteamRuntimeFiles.Failure.invalidPackage }
++                executable = bytes
++            }
++        }
++        guard let executable, executable.count >= 64, executable.prefix(2) == Data([0x4d, 0x5a]) else {
++            throw SteamRuntimeFiles.Failure.invalidPackage
++        }
++        try Task.checkCancellation()
++        guard wine_process_is_running() == 0, wineserver_is_running() == 0 else {
++            throw SteamRuntimeFiles.Failure.activeSession
++        }
++        // Preserve existing registries: never seed an unmarked, populated prefix.
++        if !fm.fileExists(atPath: prefix.appendingPathComponent(".update-timestamp").path),
++           ["system.reg", "user.reg"].contains(where: { fm.fileExists(atPath: prefix.appendingPathComponent($0).path) }) {
++            throw SteamRuntimeFiles.Failure.conflict
++        }
++        madeira_seed_prefix_if_needed(prefix.path)
++        let destination = try SteamRuntimeFiles.destination(relative, under: drive)
++        guard !fm.fileExists(atPath: destination.path) else { throw SteamRuntimeFiles.Failure.conflict }
++        try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
++        let staging = destination.deletingLastPathComponent().appendingPathComponent(".gamebridge-" + UUID().uuidString)
++        defer { try? fm.removeItem(at: staging) }
++        try executable.write(to: staging, options: .withoutOverwriting)
++        try fm.moveItem(at: staging, to: destination)
++    }
++
++    private static func hash(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+ }
+ #endif
+diff --git a/app/Madeira/Info.plist b/app/Madeira/Info.plist
+--- a/app/Madeira/Info.plist
++++ b/app/Madeira/Info.plist
+@@ -15,8 +15,8 @@
+ 	<true/>
+ 	<key>CFBundleDevelopmentRegion</key>
+ 	<string>en</string>
+-	<key>CFBundleDisplayName</key>
+-	<string>Madeira</string>
++	<key>CFBundleDisplayName</key>
++	<string>GameBridge Research</string>
+ 	<key>CFBundleDocumentTypes</key>
+ 	<array>
+ 		<dict>
+@@ -51,7 +51,7 @@
+ 			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+ 			<key>CFBundleURLSchemes</key>
+ 			<array>
+-				<string>madeira</string>
++				<string>gamebridge-research</string>
+ 			</array>
+ 		</dict>
+ 	</array>
+diff --git a/app/Madeira/JITNetwork.swift b/app/Madeira/JITNetwork.swift
+--- a/app/Madeira/JITNetwork.swift
++++ b/app/Madeira/JITNetwork.swift
+@@ -291,9 +291,9 @@
+             URLQueryItem(name: "name", value: Self.name),
+             URLQueryItem(name: "input", value: "text"),
+             URLQueryItem(name: "text", value: input),
+-            URLQueryItem(name: "x-success", value: "madeira://jit-network/success"),
++            URLQueryItem(name: "x-success", value: "gamebridge-research://jit-network/success"),
+-            URLQueryItem(name: "x-error", value: "madeira://jit-network/error"),
++            URLQueryItem(name: "x-error", value: "gamebridge-research://jit-network/error"),
+-            URLQueryItem(name: "x-cancel", value: "madeira://jit-network/cancel")
++            URLQueryItem(name: "x-cancel", value: "gamebridge-research://jit-network/cancel")
+         ]
+         guard let url = c.url else { completion(.failed("bad shortcut URL")); return }
+         LogStore.shared.log("[jit-shortcut] run input=\(input)")
+diff --git a/app/Madeira.xcodeproj/project.pbxproj b/app/Madeira.xcodeproj/project.pbxproj
+--- a/app/Madeira.xcodeproj/project.pbxproj
++++ b/app/Madeira.xcodeproj/project.pbxproj
+@@ -1304,9 +1304,9 @@
+ 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+ 				GCC_WARN_UNUSED_FUNCTION = YES;
+ 				GCC_WARN_UNUSED_VARIABLE = YES;
+-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+-				MADEIRA_BUNDLE_IDENTIFIER = com.willfaust.madeora;
+-				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
++				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
++				MADEIRA_BUNDLE_IDENTIFIER = org.enostudio.gamebridge.research;
++				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+ 				MTL_FAST_MATH = YES;
+ 				ONLY_ACTIVE_ARCH = YES;
+ 				SDKROOT = iphoneos;
+@@ -1333,9 +1333,9 @@
+ 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+ 				GCC_WARN_UNUSED_FUNCTION = YES;
+ 				GCC_WARN_UNUSED_VARIABLE = YES;
+-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+-				MADEIRA_BUNDLE_IDENTIFIER = com.willfaust.madeora;
+-				MTL_ENABLE_DEBUG_INFO = NO;
++				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
++				MADEIRA_BUNDLE_IDENTIFIER = org.enostudio.gamebridge.research;
++				MTL_ENABLE_DEBUG_INFO = NO;
+ 				MTL_FAST_MATH = YES;
+ 				SDKROOT = iphoneos;
+ 				SWIFT_COMPILATION_MODE = wholemodule;
