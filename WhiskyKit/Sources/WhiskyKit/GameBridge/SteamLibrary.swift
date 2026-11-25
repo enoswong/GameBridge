@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import Foundation
+import GameBridgeCore
 
 public enum SteamPlatform: String, Codable, Sendable { case nativeMacOS, windowsWine }
 public struct SteamInstalledGame: Codable, Sendable, Identifiable {
@@ -11,9 +12,9 @@ public struct SteamInstalledGame: Codable, Sendable, Identifiable {
     public let libraryURL: URL
     public let stateFlags: UInt64
     public let platform: SteamPlatform
-    public var isFullyInstalled: Bool { stateFlags == 4 }
+    public var isFullyInstalled: Bool { SteamManifestPolicy.isFullyInstalled(stateFlags: stateFlags) }
     // Steam's app manifest flags for files missing (32) and files corrupt (128).
-    private var hasDamageFlag: Bool { stateFlags & (32 | 128) != 0 }
+    private var hasDamageFlag: Bool { SteamManifestPolicy.hasDamage(stateFlags: stateFlags) }
     var isInstalledOrDamaged: Bool { isFullyInstalled || hasDamageFlag }
     public var filesNeedVerification: Bool {
         if hasDamageFlag { return true }
