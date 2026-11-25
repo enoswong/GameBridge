@@ -1,0 +1,44 @@
+name: Mobile research native build
+on:
+  push:
+    branches: [gamebridge-universal]
+    paths:
+      - '.github/workflows/MobileResearchBuild.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: gamebridge-mobile-native
+  cancel-in-progress: true
+jobs:
+  native-source-build:
+    # Standard public repository runner, matching the upstream SDK generation.
+    runs-on: xcode-27
+    timeout-minutes: 360
+    env:
+      JOBS: '3'
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Inspect native toolchain and available storage
+        run: |
+          uname -m
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          xcrun --sdk iphoneos --show-sdk-path
+          df -h .
+          rustup --version
+          python3 --version
+      - name: Resolve all pinned source dependencies
+        run: bash scripts/prepare-mobile-engine.sh --steam-first-prepare
+      - name: Compile mobile engine and validate local research IPA
+        run: bash scripts/prepare-mobile-engine.sh --steam-first-build
+      - name: Record final disk and toolchain diagnostics
+        if: always()
+        run: |
+          df -h .
+          xcodebuild -version
+      # Intentionally no IPA upload, release, or distribution.
