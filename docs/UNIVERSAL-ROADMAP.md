@@ -21,6 +21,12 @@ The product is a transparent Windows Steam environment, not a replacement Steam 
 - Separate pinned-source research workspace and patch validation in CI. No tested mobile IPA yet; client provisioning, bundle identity, CEF isolation and physical-device gates remain open.
 - Split macOS CLI state transitions and UI event handling to address strict lint complexity.
 
+## Fourth iteration
+- Coalesced adjacent patch hunks after native git apply failed in CI; native revalidation required.
+- First-run Steam bootstrap from the pinned Valve archive; isolated client folder, hash and path checks, no overwrite.
+- Separate research bundle ID, display name and JIT callback scheme. Signing and full mobile build remain unverified.
+- CI checks the actual pinned archive, not just the source diff.
+
 ## Next engineering gates
 1. Verify all macOS builds, strict lint and regression tests. Real Mac: existing prefix, Steam login, download, update, launch, exit, and missing dependency case.
 2. Incremental audit cache keyed by engine version, game build and file metadata; process-level error collection and durable repair queue; manifest polling is implemented. Do not modify live DLLs or forcibly terminate Steam. Queue repairs for verified idle periods; validate safe retry and rollback.
