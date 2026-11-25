@@ -1,6 +1,6 @@
 # Mobile Windows Steam research (iOS and iPadOS)
 
-Status: source integration preparation only. Neither iOS nor iPadOS is supported by GameBridge yet.
+Status: the Steam-first source overlay is implemented; full mobile engine build and device validation are pending. Neither iOS nor iPadOS is supported by GameBridge yet.
 
 ## Pinned upstream
 
@@ -27,11 +27,25 @@ bash scripts/prepare-mobile-engine.sh --build
 
 This invokes upstream's build process (including its Homebrew dependencies). It is a research build of Madeira, not a GameBridge IPA, and has not been executed here. Follow the upstream build record for absent inputs. Do not distribute the output or substitute an unrelated prebuilt engine. Do not copy login credentials or tokens from another machine. Development signing and JIT availability must be assessed on each device; paid signing is not proof of JIT availability.
 
+## Steam-first research host (third iteration)
+
+The [source patch](../mobile/patches/0001-steam-first-research.patch) uses Madeira's existing experimental Big Picture session lifecycle (LibraryEntry.bigPictureEntry and launchLibraryEntry) but opens Valve's normal Windows Steam desktop. The home page has Open Steam rather than a game library, preserves the upstream JIT setup and full-screen guest renderer, and does not sign in through the headless Dock host. The research batch uses a separate Steam folder, does not seed it from Dock, does not disable Chromium sandboxing, and does not freeze Steam updates. This may expose additional guest compatibility failures; those failures must be resolved, not hidden.
+
+```sh
+bash scripts/prepare-mobile-engine.sh --steam-first-prepare
+# On a reviewed macOS development environment, explicitly:
+bash scripts/prepare-mobile-engine.sh --steam-first-build
+```
+
+The Steam-first checkout has its own directory suffix. The script validates the full tracked working tree against a temporary Git index, applies the pinned overlay, and checks recursive submodule revisions. The upstream build and code signing remain unverified. The output still uses Madeira's upstream IPA name and bundle identity; **do not install over an existing Madeira installation**. A distinct GameBridge application identity and reviewed entitlements are required before device distribution. No ready-to-install IPA is provided.
+
+The research route currently requires an independently obtained, authorized Steam executable staged in the guest's existing isolated `drive_c/Program Files/Steam Big Picture` folder. There is no automatic Steam bootstrapper provisioning yet. Do not copy credentials or use a personal account before the CEF isolation and stability gates pass. The patched path may fail with the current Wine/CEF implementation.
+
 ## Mobile integration sequence
 
 1. Clean source build for arm64 iPhoneOS and physical iPhone/iPad; verify architecture, entitlements, source provenance and redistribution rights.
 2. Exercise x86 and x64 test programs and a guest virtual desktop, then confirm real Steam desktop binaries start. Investigate CEF process, window/rendering, memory and network failures independently; no headless launcher or fake storefront counts.
-3. Build a new Steam-first host UI using the upstream in-process desktop and input primitives only after the guest lifecycle is verified. Keep sign-in and game operations in Valve's own interface.
+3. Verify the Steam-first host source overlay and existing in-process guest lifecycle; complete automatic official-client provisioning, distinct bundle identity and on-device security review. Keep sign-in and game operations in Valve's own interface.
 4. Port the shared manifest and repair policy. Use sandbox-relative paths and idle guest boundaries; never overwrite DLLs in a live guest.
 5. Test install/update/validation, Steam Guard, store/library, two game architectures, input, audio, saves, interruption and restart on both device classes. Do not declare support based on simulator compilation.
 
