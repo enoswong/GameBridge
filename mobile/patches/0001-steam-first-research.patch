@@ -17,7 +17,7 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
              .navigationBarTitleDisplayMode(.inline)
              .toolbarBackground(.regularMaterial, for: .navigationBar)
              // The library keeps a material bar only before iOS 26. From iOS 26 the
-@@ -1399,12 +1398,46 @@
+@@ -1399,12 +1398,71 @@
              }
              // A Home Screen shortcut (madeira://play?exe=...) starts its library entry,
              // now or, from a cold start, once the library is up.
@@ -28,6 +28,7 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
      }
  
 -    /// The developer interface. Orientation comes from the view's own shape, not
++    @State private var gameBridgePreparing = false
 +    // GameBridge research: use the existing in-process Wine desktop session, not Dock.
 +    private var gameBridgeSteamHome: some View {
 +        ScrollView {
@@ -41,16 +42,14 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +                Text("Do not sign in with a personal account until client security and stability are verified.")
 +                    .multilineTextAlignment(.center)
 +                Button("Open Steam") {
-+                    library.error = nil
-+                    guard LibraryEntry.steamClientInstalled else {
-+                        library.error = "Stage an official Steam executable in the isolated research folder."
-+                        return
-+                    }
-+                    launchLibraryEntry(.bigPictureEntry)
++                    gameBridgeOpenSteam()
 +                }
 +                .buttonStyle(.borderedProminent)
 +                .controlSize(.large)
-+                .disabled(library.startingJIT != nil || library.launching)
++                .disabled(gameBridgePreparing || library.startingJIT != nil || library.launching)
++                if gameBridgePreparing {
++                    ProgressView("Preparing official Steam bootstrapper…")
++                }
 +                if let error = library.error {
 +                    Text(error).foregroundStyle(.secondary).textSelection(.enabled)
 +                }
@@ -60,6 +59,32 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +            .padding(24)
 +            .frame(maxWidth: 480)
 +            .frame(maxWidth: .infinity)
++        }
++    }
++
++    private func gameBridgeOpenSteam() {
++        guard !gameBridgePreparing, library.current == nil,
++              wine_process_is_running() == 0, wineserver_is_running() == 0 else { return }
++        library.error = nil
++        if LibraryEntry.steamClientInstalled {
++            launchLibraryEntry(.bigPictureEntry)
++            return
++        }
++        gameBridgePreparing = true
++        Task { @MainActor in
++            defer { gameBridgePreparing = false }
++            do {
++                guard let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
++                    throw SteamRuntimeFiles.Failure.prefixMissing
++                }
++                try await SteamRuntimeInstaller.shared.prepareDesktopBootstrap(
++                    prefix: documents.appendingPathComponent("wine")
++                )
++                guard LibraryEntry.steamClientInstalled else { throw SteamRuntimeFiles.Failure.invalidPackage }
++                launchLibraryEntry(.bigPictureEntry)
++            } catch {
++                library.error = error.localizedDescription
++            }
 +        }
 +    }
 +
