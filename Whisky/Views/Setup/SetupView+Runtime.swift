@@ -147,6 +147,9 @@ extension SetupView {
     @MainActor private func receiveLaunchEvent(_ event: RunnerControlEvent, operation: UUID) async {
         guard operationID == operation else { return }
         switch event.kind {
+        case "postSteamMaintenance":
+            busy = true
+            message = "Steam 已退出，正在處理新安裝或更新的遊戲…"
         case "auditingSteamLibrary":
             message = "正在檢查已安裝的 Steam 遊戲…"
         case "steamLibraryAuditNotice":
