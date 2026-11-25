@@ -23,12 +23,12 @@ public struct SteamDirectoryAudit: Sendable {
         guard library.resolvingSymlinksInPath().standardizedFileURL.path == library.path else {
             throw PortableLegacyGameAudit.AuditError.unavailableDirectory(library.path)
         }
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: library.path) else {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: library.path) else {
             return Self(reports: [], skippedDirectories: 0, failedDirectories: 0)
         }
         let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey]
-        let entries = try fm.contentsOfDirectory(at: library, includingPropertiesForKeys: Array(keys))
+        let entries = try fileManager.contentsOfDirectory(at: library, includingPropertiesForKeys: Array(keys))
         let directories = try entries.filter {
             let values = try $0.resourceValues(forKeys: keys)
             return values.isDirectory == true && values.isSymbolicLink == false
