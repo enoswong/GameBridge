@@ -37,15 +37,21 @@ bash scripts/prepare-mobile-engine.sh --steam-first-prepare
 bash scripts/prepare-mobile-engine.sh --steam-first-build
 ```
 
-The Steam-first checkout has its own directory suffix. The script validates the full tracked working tree against a temporary Git index, applies the pinned overlay, and checks recursive submodule revisions. The upstream build and code signing remain unverified. The output still uses Madeira's upstream IPA name and bundle identity; **do not install over an existing Madeira installation**. A distinct GameBridge application identity and reviewed entitlements are required before device distribution. No ready-to-install IPA is provided.
+The Steam-first checkout has its own directory suffix. The script validates the tracked working tree against a temporary Git index, applies both pinned overlays, and checks recursive submodule revisions. The research Xcode project now sets the separate bundle identifier `org.enostudio.gamebridge.research` for the app (with inherited extension suffixes), the display name GameBridge Research, and the separate `gamebridge-research://jit-network/` callback scheme. These are proposed development identifiers, not registered signing credentials; remaining upstream identity assumptions and entitlements must be checked on device. The upstream IPA filename still says Madeira. No ready-to-install IPA is provided.
 
-The research route currently requires an independently obtained, authorized Steam executable staged in the guest's existing isolated `drive_c/Program Files/Steam Big Picture` folder. There is no automatic Steam bootstrapper provisioning yet. Do not copy credentials or use a personal account before the CEF isolation and stability gates pass. The patched path may fail with the current Wine/CEF implementation.
+## First-run Steam bootstrap (fourth iteration)
+
+Pressing Open Steam in the research UI invokes a new method on the upstream SteamRuntimeInstaller actor when the isolated client executable is absent. It uses the existing pinned Valve CDN `steam_win32.zip` package (2,307,664 bytes), HTTPS host-restricted redirects, exact SHA-256 and the upstream strict ZIP parser. It extracts only `steam.exe`, checks its MZ header, preserves existing registry/prefix data, and publishes through a unique temporary file without overwriting an existing client. The same idle guest checks are performed before download and before installation. Existing installations are reused. Steam itself must complete the rest of the installation and update; this has not yet been tested on iPhone/iPad. A hash mismatch, absent package, missing executable or active session fails rather than silently fetching an untrusted replacement.
+
+The separate client path remains `drive_c/Program Files/Steam Big Picture` for compatibility with the existing Wine desktop session. No Valve credential files, pinned Dock installation or third-party DLLs are copied. Do not use a personal account before security and stability gates pass. Full PE validation, disk-space checks, bounded streaming download, bootstrap architecture compatibility, security review and device validation remain outstanding.
+
+CI checks the exact upstream patch application and downloads the pinned bootstrap archive for size, hash and executable-entry verification without executing it. This does not substitute for the full mobile build.
 
 ## Mobile integration sequence
 
 1. Clean source build for arm64 iPhoneOS and physical iPhone/iPad; verify architecture, entitlements, source provenance and redistribution rights.
 2. Exercise x86 and x64 test programs and a guest virtual desktop, then confirm real Steam desktop binaries start. Investigate CEF process, window/rendering, memory and network failures independently; no headless launcher or fake storefront counts.
-3. Verify the Steam-first host source overlay and existing in-process guest lifecycle; complete automatic official-client provisioning, distinct bundle identity and on-device security review. Keep sign-in and game operations in Valve's own interface.
+3. Verify the Steam-first host source overlay and existing in-process guest lifecycle; validate first-run official bootstrap provisioning, the distinct bundle identity, and on-device security review. Keep sign-in and game operations in Valve's own interface.
 4. Port the shared manifest and repair policy. Use sandbox-relative paths and idle guest boundaries; never overwrite DLLs in a live guest.
 5. Test install/update/validation, Steam Guard, store/library, two game architectures, input, audio, saves, interruption and restart on both device classes. Do not declare support based on simulator compilation.
 
