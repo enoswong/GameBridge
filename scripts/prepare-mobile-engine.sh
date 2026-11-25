@@ -5,13 +5,15 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 upstream="https://github.com/willfaust/Madeira.git"
 revision="fbad430410b4075192166172447c859714726de9"
-workspace="$root/build/mobile-research/madeira-$revision"
 mode="${1:---prepare}"
-if [[ "$mode" != "--prepare" && "$mode" != "--build" ]]; then
-    echo "Usage: bash scripts/prepare-mobile-engine.sh [--prepare|--build]" >&2
-    exit 2
-fi
-if [[ "$mode" == "--build" ]]; then
+case "$mode" in
+    --prepare|--build) research_ui=0 ;;
+    --steam-first-prepare|--steam-first-build) research_ui=1 ;;
+    *) echo "Usage: $0 [--prepare|--build|--steam-first-prepare|--steam-first-build]" >&2; exit 2 ;;
+esac
+workspace="$root/build/mobile-research/madeira-$revision"
+if [[ "$research_ui" == 1 ]]; then workspace="$workspace-steam-first"; fi
+if [[ "$mode" == *build ]]; then
     [[ "$(uname -s)" == "Darwin" ]] || { echo "Xcode on macOS is required." >&2; exit 1; }
     command -v xcodebuild >/dev/null
     command -v brew >/dev/null
@@ -27,8 +29,24 @@ fi
 [[ ! -L "$workspace" && -d "$workspace/.git" ]]
 [[ "$(git -C "$workspace" remote get-url origin)" == "$upstream" ]]
 [[ "$(git -C "$workspace" rev-parse HEAD)" == "$revision" ]]
-git -C "$workspace" diff --quiet HEAD --
 git -C "$workspace" diff --cached --quiet HEAD --
+patch="$root/mobile/patches/0001-steam-first-research.patch"
+if [[ "$research_ui" == 1 ]]; then
+    # Validate the complete intended working tree against a temporary index.
+    # Never overwrite a developer's modifications or reuse a dirty checkout.
+    index="$(mktemp)"
+    rm -f "$index"
+    trap 'rm -f "$index" "$index.lock"' EXIT
+    GIT_INDEX_FILE="$index" git -C "$workspace" read-tree HEAD
+    GIT_INDEX_FILE="$index" git -C "$workspace" apply --cached "$patch"
+    if git -C "$workspace" diff --quiet HEAD --; then
+        git -C "$workspace" apply --check "$patch"
+        git -C "$workspace" apply "$patch"
+    fi
+    GIT_INDEX_FILE="$index" git -C "$workspace" diff --quiet --ignore-submodules=all --
+else
+    git -C "$workspace" diff --quiet HEAD --
+fi
 # This route is Valve's desktop executable, not Madeira Dock's headless launcher.
 source_file="$workspace/app/Madeira/ContentView.swift"
 grep -Fq 'Button("Steam Testing")' "$source_file"
@@ -48,7 +66,7 @@ if grep -Eq '^[-+U]' <<< "$status"; then
     exit 1
 fi
 printf 'Pinned research checkout: %s\n' "$workspace"
-if [[ "$mode" == "--build" ]]; then
-    printf 'Building upstream research IPA (not a GameBridge release).\n'
+if [[ "$mode" == *build ]]; then
+    printf 'Building mobile research IPA (not a GameBridge release).\n'
     (cd "$workspace" && bash tools/build-ipa.sh)
 fi
