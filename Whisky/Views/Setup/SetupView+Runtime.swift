@@ -21,7 +21,7 @@ extension SetupView {
             }
             if loadFailed { message = "" }
             loadFailed = false
-            if let environment = selection, environment.status == .ready,
+            if showAdvancedSettings, let environment = selection, environment.status == .ready,
                let steamPath = environment.steamRelativePath {
                 let games = await Task.detached(priority: .utility) {
                     try? SteamLibraryScanner.scanLaunchableWindows(
