@@ -289,7 +289,7 @@ diff --git a/app/Madeira/PortableLegacyGameAudit.swift b/app/Madeira/PortableLeg
 new file mode 100644
 --- /dev/null
 +++ b/app/Madeira/PortableLegacyGameAudit.swift
-@@ -0,0 +1,139 @@
+@@ -0,0 +1,140 @@
 +// SPDX-License-Identifier: GPL-3.0-or-later
 +import Foundation
 +
@@ -378,7 +378,8 @@ new file mode 100644
 +                let system = systemNames(for: imports.architecture)
 +                for name in imports.libraries {
 +                    let item = Import(
-+                        name: name, architecture: imports.architecture, component: PortableLegacyGameAudit.component(for: name)
++                        name: name, architecture: imports.architecture,
++                        component: PortableLegacyGameAudit.component(for: name)
 +                    )
 +                    if item.component != nil { runtime.insert(item) }
 +                    if !name.hasPrefix("api-ms-win-"), !name.hasPrefix("ext-ms-win-"),
@@ -459,12 +460,12 @@ new file mode 100644
 +        guard library.resolvingSymlinksInPath().standardizedFileURL.path == library.path else {
 +            throw PortableLegacyGameAudit.AuditError.unavailableDirectory(library.path)
 +        }
-+        let fm = FileManager.default
-+        guard fm.fileExists(atPath: library.path) else {
++        let fileManager = FileManager.default
++        guard fileManager.fileExists(atPath: library.path) else {
 +            return Self(reports: [], skippedDirectories: 0, failedDirectories: 0)
 +        }
 +        let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey]
-+        let entries = try fm.contentsOfDirectory(at: library, includingPropertiesForKeys: Array(keys))
++        let entries = try fileManager.contentsOfDirectory(at: library, includingPropertiesForKeys: Array(keys))
 +        let directories = try entries.filter {
 +            let values = try $0.resourceValues(forKeys: keys)
 +            return values.isDirectory == true && values.isSymbolicLink == false
