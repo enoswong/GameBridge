@@ -10,6 +10,22 @@ concurrency:
   group: universal-validation-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  mobile-source-patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check research script syntax
+        run: bash -n scripts/prepare-mobile-engine.sh
+      - name: Verify desktop Steam patch against pinned upstream
+        run: |
+          git init "$RUNNER_TEMP/madeira"
+          git -C "$RUNNER_TEMP/madeira" remote add origin https://github.com/willfaust/Madeira.git
+          git -C "$RUNNER_TEMP/madeira" fetch --depth=1 origin fbad430410b4075192166172447c859714726de9
+          git -C "$RUNNER_TEMP/madeira" checkout --detach FETCH_HEAD
+          git -C "$RUNNER_TEMP/madeira" apply --check "$GITHUB_WORKSPACE/mobile/patches/0001-steam-first-research.patch"
+          git -C "$RUNNER_TEMP/madeira" apply "$GITHUB_WORKSPACE/mobile/patches/0001-steam-first-research.patch"
+          git -C "$RUNNER_TEMP/madeira" diff --stat
   apple-platforms:
     runs-on: macos-15
     timeout-minutes: 30
