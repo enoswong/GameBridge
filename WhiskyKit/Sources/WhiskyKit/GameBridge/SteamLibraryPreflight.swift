@@ -13,10 +13,12 @@ public struct SteamLibraryPreflight: Sendable {
     }
 
     public static func scan(prefix: URL, steamRelativePath: String) throws -> Self {
-        let games = try SteamLibraryScanner.scanLaunchableWindows(
+        let snapshot = try SteamLibraryScanner.scanManagedWindows(
             prefix: prefix, steamRelativePath: steamRelativePath
         )
-        return try inspect(games: games, prefix: prefix)
+        let result = try inspect(games: snapshot.games, prefix: prefix)
+        let warnings = snapshot.issues.map { $0.path + ": " + $0.message }
+        return Self(reports: result.reports, damagedGames: result.damagedGames, issues: result.issues + warnings)
     }
 
     static func inspect(games: [SteamInstalledGame], prefix: URL) throws -> Self {
@@ -35,7 +37,7 @@ public struct SteamLibraryPreflight: Sendable {
             do {
                 let report = try LegacyGameAudit.scan(directory: game.installDirectory, prefix: prefix)
                 reports.append(report)
-                if report.scanLimitReached || !report.unreadableExecutables.isEmpty {
+                if report.scanLimitReached || !report.unreadableExecutables.isEmpty || report.executablesScanned == 0 {
                     issues.append("Partial dependency scan: " + game.name)
                 }
             } catch {
