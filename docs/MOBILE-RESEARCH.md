@@ -47,6 +47,14 @@ The separate client path remains `drive_c/Program Files/Steam Big Picture` for c
 
 CI checks the exact upstream patch application and downloads the pinned bootstrap archive for size, hash and executable-entry verification without executing it. This does not substitute for the full mobile build.
 
+## Shared dependency preflight (fifth iteration)
+
+The Windows PE reader, runtime family classifier and read-only dependency audit now live in GameBridgeCore. The mobile overlay compiles exact copies of those sources, checked with cmp during preparation and CI. Before opening Steam, the research host scans the isolated default Steam client game directories (up to 16 games and 256 EXE/DLL files per game). It records incomplete scans and unresolved import families, not a proof that every DLL is absent. Additional libraries, incremental scan coverage, dynamic loader events and game integrity verification are still pending.
+
+The first-run screen has a persistent, initially off option to prepare Microsoft Visual C++ 2015–2022. When authorized, the existing upstream extractor downloads only absent architecture packages, uses pinned Microsoft hashes and validates the extracted files before publishing a fresh runtime folder. Valid existing runtimes are reused; conflicting or partial custom folders are preserved and reported. The upstream bridge applies the overlays at guest startup, not while Steam is running. This path is source integration only until a mobile build and device session pass. The old Visual C++ 2005–2013, DirectX, .NET, XNA, PhysX and OpenAL are recognized where imports expose them; automatic installation of those families on mobile is not implemented.
+
+CI now checks the top-level FEX, Wine, DXMT and Dock gitlink commits are obtainable without building them. Nested dependencies, native toolchains and the full IPA build remain separate gates.
+
 ## Mobile integration sequence
 
 1. Clean source build for arm64 iPhoneOS and physical iPhone/iPad; verify architecture, entitlements, source provenance and redistribution rights.
