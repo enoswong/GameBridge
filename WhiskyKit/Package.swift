@@ -29,15 +29,15 @@ let package = Package(
         .library(name: "GameBridgeCore", targets: ["GameBridgeCore"]),
         .library(
             name: "WhiskyKit",
-            targets: [
-        .target(name: "GameBridgeCore"),
-        .testTarget(name: "GameBridgeCoreTests", dependencies: ["GameBridgeCore"]),"WhiskyKit"]
+            targets: ["WhiskyKit"]
         )
     ],
     dependencies: [
       .package(url: "https://github.com/SwiftPackageIndex/SemanticVersion.git", from: "0.3.0")
     ],
     targets: [
+        .target(name: "GameBridgeCore"),
+        .testTarget(name: "GameBridgeCoreTests", dependencies: ["GameBridgeCore"]),
         .target(
             name: "WhiskyKit",
             dependencies: ["SemanticVersion", "GameBridgeCore"]
