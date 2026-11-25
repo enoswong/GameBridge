@@ -56,7 +56,7 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +                if let error = library.error {
 +                    Text(error).foregroundStyle(.secondary).textSelection(.enabled)
 +                }
-+                Button("Engine settings") { devSheet = .allSettings }
++                Button("Enable JIT") { enableJIT() }
 +                    .buttonStyle(.bordered)
 +            }
 +            .padding(24)
