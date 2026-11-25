@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import Foundation
+import GameBridgeCore
 
 /// Read-only inspection of the managed Windows Steam library before the client starts.
 public struct SteamLibraryPreflight: Sendable {
@@ -24,8 +25,9 @@ public struct SteamLibraryPreflight: Sendable {
         var issues: [String] = []
         for game in games {
             try Task.checkCancellation()
-            guard game.platform == .windowsWine, game.appID != 228980,
-                  game.isInstalledOrDamaged else { continue }
+            guard SteamManifestPolicy.shouldInspect(
+                appID: game.appID, stateFlags: game.stateFlags, isWindows: game.platform == .windowsWine
+            ) else { continue }
             if game.filesNeedVerification {
                 damaged.append(game)
                 continue
