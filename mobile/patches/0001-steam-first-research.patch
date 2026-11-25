@@ -1,7 +1,7 @@
 diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 --- a/app/Madeira/ContentView.swift
 +++ b/app/Madeira/ContentView.swift
-@@ -1324,6 +1324,5 @@
+@@ -1324,13 +1324,12 @@
                      sessionBody
                          .navigationBarHidden(true)
                  } else if library.enabled {
@@ -9,7 +9,6 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 -                                startDock: { startDock($0, compactPool: $1) })
 +                    gameBridgeSteamHome
                  } else {
-@@ -1330,7 +1329,7 @@
                      developerBody
                  }
              }
@@ -18,14 +17,13 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
              .navigationBarTitleDisplayMode(.inline)
              .toolbarBackground(.regularMaterial, for: .navigationBar)
              // The library keeps a material bar only before iOS 26. From iOS 26 the
-@@ -1399,5 +1398,4 @@
+@@ -1399,12 +1398,46 @@
              }
              // A Home Screen shortcut (madeira://play?exe=...) starts its library entry,
              // now or, from a cold start, once the library is up.
 -            .onReceive(ShortcutRouter.shared.$pendingExe) { _ in launchPendingShortcut() }
 -            .onChange(of: library.enabled) { _, _ in launchPendingShortcut() }
 +            // GameBridge research: only the explicit Steam desktop entry can start a session.
-@@ -1404,7 +1402,42 @@
          }
      }
  
@@ -97,7 +95,7 @@ diff --git a/app/Madeira/Library.swift b/app/Madeira/Library.swift
          entry.id = bigPictureID; entry.bigPicture = true; entry.graphicsAPI = "Steam"; entry.launchMode = "desktop"
          return entry
      }
-@@ -626,8 +619,9 @@
+@@ -626,64 +619,41 @@
      var listedInLibrary: Bool { bigPicture != true || Self.bigPictureShown }
      /// The button is offered when Big Picture's folder has a client, or the Dock's steam.exe
      /// can seed one.
@@ -112,7 +110,6 @@ diff --git a/app/Madeira/Library.swift b/app/Madeira/Library.swift
 +        let values = try? executable.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
 +        return values?.isRegularFile == true && values?.isSymbolicLink == false
 +    }
-@@ -634,56 +628,32 @@
      /// Writes C:\big-picture.bat for this launch, seeding Big Picture's folder with the
      /// Dock's steam.exe when it has none yet. False, having logged why, when there is no client.
      @discardableResult
