@@ -45,6 +45,7 @@ struct SetupView: View {
     @State var operationID = UUID()
     @State private var acceptedTerms = false
     @State private var showTerms = false
+    @State var showAdvancedSettings = false
     @State var loaded = false
     @State var loadFailed = false
     @State var rosettaInstalled = Rosetta2.isRosettaInstalled
@@ -69,7 +70,7 @@ struct SetupView: View {
                 }
             }
             if !message.isEmpty { Text(message).font(.callout).textSelection(.enabled) }
-            DisclosureGroup("進階設定") {
+            DisclosureGroup("進階設定", isExpanded: $showAdvancedSettings) {
                 VStack(alignment: .leading, spacing: 12) {
                     advancedControls
                     LegacyGameControls(environment: selection) { arguments in
@@ -154,7 +155,7 @@ struct SetupView: View {
                     .controlSize(.large)
                 if failedLaunchEnvironment == selected.id { retryButton(for: selected) }
                 Toggle("自動補齊遊戲的 Microsoft 共用元件", isOn: $autoRepairLibrary)
-                    .help("開啟 Steam 前檢查已安裝遊戲；只使用已驗證的 Microsoft 安裝器。")
+                    .help("開啟 Steam 前檢查已安裝遊戲。啟用後允許使用已驗證的 Microsoft 安裝器補齊元件。")
             case .running:
                 Text("Steam 正在執行。可在 Steam 收藏庫切換遊戲。")
                     .foregroundStyle(.secondary)
