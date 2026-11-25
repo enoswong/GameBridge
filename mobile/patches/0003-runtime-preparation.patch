@@ -1,0 +1,65 @@
+diff --git a/app/Madeira/VCRedist.swift b/app/Madeira/VCRedist.swift
+--- a/app/Madeira/VCRedist.swift
++++ b/app/Madeira/VCRedist.swift
+@@ -360,6 +360,61 @@
+         }
+     }
+ 
++    /// Steam-first opt-in preparation. Never replace a user's existing runtime folder.
++    func prepareForSteam() async throws {
++        guard Self.enabled, !busy, wine_process_is_running() == 0,
++              wineserver_is_running() == 0, LibraryModel.shared.current == nil else {
++            throw VCRedistError.message("Runtime preparation is unavailable while another operation is active.")
++        }
++        refresh()
++        let pending = Self.packages.filter { package in
++            !(installed[package.arch].map { VCRedistInstaller.atLeastPinned($0) } ?? false)
++        }
++        if pending.isEmpty { return }
++        for package in pending {
++            let folder = VCRedistInstaller.folder(package.arch)
++            guard !FileManager.default.fileExists(atPath: folder.path),
++                  (try? folder.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) != true else {
++                throw VCRedistError.message("Existing \(package.arch) runtime files need review; they were preserved.")
++            }
++        }
++        error = nil
++        phase = .downloading(0)
++        defer { phase = .idle; observations.removeAll(); refresh() }
++        for package in pending {
++            try Task.checkCancellation()
++            let file = try await download(package) { _ in }
++            defer { try? FileManager.default.removeItem(at: file) }
++            phase = .installing(0)
++            let files = try await Task.detached(priority: .utility) {
++                try VCRedistInstaller.extract(installer: file, package: package)
++            }.value
++            try Task.checkCancellation()
++            guard wine_process_is_running() == 0, wineserver_is_running() == 0,
++                  LibraryModel.shared.current == nil else {
++                throw VCRedistError.message("A Windows session started; runtime files were not changed.")
++            }
++            let folder = VCRedistInstaller.folder(package.arch)
++            guard !FileManager.default.fileExists(atPath: folder.path),
++                  (try? folder.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) != true else {
++                throw VCRedistError.message("Runtime folder appeared during preparation; it was preserved.")
++            }
++            // The existing extractor checks the pinned installer, DLL names, version and architecture.
++            // Publish a fresh complete folder; do not use the replacement path for custom files.
++            let stage = folder.deletingLastPathComponent().appendingPathComponent(".gamebridge-vc-" + UUID().uuidString)
++            defer { try? FileManager.default.removeItem(at: stage) }
++            try FileManager.default.createDirectory(at: stage, withIntermediateDirectories: false)
++            for (name, data) in files { try data.write(to: stage.appendingPathComponent(name), options: .withoutOverwriting) }
++            guard VCRedistInstaller.installedVersion(in: stage, package: package).map({
++                VCRedistInstaller.atLeastPinned($0)
++            }) == true else {
++                throw VCRedistError.message("Runtime files failed readback verification.")
++            }
++            try FileManager.default.moveItem(at: stage, to: folder)
++            log("Steam preflight prepared \(package.title)")
++        }
++    }
++
+     /// One installer, to the temporary folder: checked by size and SHA-256.
+     private func download(_ package: VCRedistPin.Package, progress: @escaping @MainActor (Int64) -> Void) async throws -> URL {
+         let kept = FileManager.default.temporaryDirectory.appendingPathComponent("madeira-" + package.fileName)
