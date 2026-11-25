@@ -234,6 +234,7 @@ extension Whisky.Runtime {
         @Option var environment: String
         @Option var appID: UInt32?
         @Flag(help: "Ask Windows Steam to verify this game’s original files.") var verifyFiles = false
+        @Flag(help: "Install supported missing shared components before opening Steam.") var repairLibrary = false
         @Flag(help: "Use a fixed Wine desktop to diagnose transparent-window input.") var virtualDesktop = false
         @Option(
             help: "Trace window/input events for one executable basename (Wine 11 diagnostic only)."
@@ -273,7 +274,10 @@ extension Whisky.Runtime {
         }
 
         private func prepareGame(steamPath: String, repair: GameFileRepair) async throws -> Bool {
-            guard let appID else { return false }
+            guard let appID else {
+                try await prepareLibrary(steamPath: steamPath, repair: repair)
+                return false
+            }
             if verifyFiles { return true }
             let prefix = repair.lease.environment.prefix
             let games = try? SteamLibraryScanner.scanLaunchableWindows(prefix: prefix, steamRelativePath: steamPath)
@@ -285,6 +289,28 @@ extension Whisky.Runtime {
             let result = try await repair.installMissing(from: [report]) { Self.announce("repairingGameDependencies") }
             Self.announce(result.pending.isEmpty ? "gameDependenciesReady" : "someDependenciesUnresolved")
             return false
+        }
+
+        private func prepareLibrary(steamPath: String, repair: GameFileRepair) async throws {
+            Self.announce("auditingSteamLibrary")
+            try await RuntimeAdapter.confirmIdle(engine: repair.engine, lease: repair.lease)
+            let prefix = repair.lease.environment.prefix
+            let audit = try SteamLibraryPreflight.scan(prefix: prefix, steamRelativePath: steamPath)
+            for issue in audit.issues { Self.log("[GameBridge] " + issue + "\n") }
+            for game in audit.damagedGames {
+                Self.log("[GameBridge] Steam file verification needed: " + game.name + "\n")
+            }
+            if repairLibrary {
+                let result = try await repair.installMissing(from: audit.reports) {
+                    Self.announce("repairingGameDependencies")
+                }
+                if !result.pending.isEmpty { Self.announce("someDependenciesUnresolved") }
+            }
+            if audit.hasUnresolvedImports || !audit.damagedGames.isEmpty || !audit.issues.isEmpty {
+                Self.announce("steamLibraryAuditNotice")
+            } else {
+                Self.announce("steamLibraryAuditFinished")
+            }
         }
 
         private static func announce(_ kind: String) {
