@@ -295,18 +295,27 @@ extension Whisky.Runtime {
             Self.announce("auditingSteamLibrary")
             try await RuntimeAdapter.confirmIdle(engine: repair.engine, lease: repair.lease)
             let prefix = repair.lease.environment.prefix
-            let audit = try SteamLibraryPreflight.scan(prefix: prefix, steamRelativePath: steamPath)
+            let audit: SteamLibraryPreflight
+            do {
+                audit = try SteamLibraryPreflight.scan(prefix: prefix, steamRelativePath: steamPath)
+            } catch {
+                try Task.checkCancellation()
+                Self.log("[GameBridge] Library audit unavailable: " + error.localizedDescription + "\n")
+                Self.announce("steamLibraryAuditNotice")
+                return
+            }
             for issue in audit.issues { Self.log("[GameBridge] " + issue + "\n") }
             for game in audit.damagedGames {
                 Self.log("[GameBridge] Steam file verification needed: " + game.name + "\n")
             }
+            var unresolved = audit.hasUnresolvedImports
             if repairLibrary {
                 let result = try await repair.installMissing(from: audit.reports) {
                     Self.announce("repairingGameDependencies")
                 }
-                if !result.pending.isEmpty { Self.announce("someDependenciesUnresolved") }
+                unresolved = !result.pending.isEmpty || result.reports.contains { !$0.unresolvedImports.isEmpty }
             }
-            if audit.hasUnresolvedImports || !audit.damagedGames.isEmpty || !audit.issues.isEmpty {
+            if unresolved || !audit.damagedGames.isEmpty || !audit.issues.isEmpty {
                 Self.announce("steamLibraryAuditNotice")
             } else {
                 Self.announce("steamLibraryAuditFinished")
