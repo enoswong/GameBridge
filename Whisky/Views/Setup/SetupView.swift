@@ -82,8 +82,8 @@ struct SetupView: View {
                         DisclosureGroup("已安裝遊戲（診斷用途）") { gameControls(for: selected) }
                     }
                 }
-                    .padding(.top, 8)
-                    .disabled(busy)
+                .padding(.top, 8)
+                .disabled(busy)
             }
             if !embedded {
                 Button("關閉") { showSetup = false }.keyboardShortcut(.cancelAction)
@@ -148,14 +148,7 @@ struct SetupView: View {
         } else if let selected = selection, selected.steamRelativePath != nil {
             switch selected.status {
             case .ready:
-                Text("直接在 Windows Steam 安裝、更新及遊玩。")
-                    .foregroundStyle(.secondary)
-                Button("開啟 Steam") { Task { await launchSteam(in: selected.id) } }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                if failedLaunchEnvironment == selected.id { retryButton(for: selected) }
-                Toggle("自動補齊遊戲的 Microsoft 共用元件", isOn: $autoRepairLibrary)
-                    .help("開啟 Steam 前檢查已安裝遊戲。啟用後允許使用已驗證的 Microsoft 安裝器補齊元件。")
+                steamReadyControls(for: selected)
             case .running:
                 Text("Steam 正在執行。可在 Steam 收藏庫切換遊戲。")
                     .foregroundStyle(.secondary)
@@ -194,6 +187,18 @@ struct SetupView: View {
                 Link("查看 GameBridge 下載", destination: releases)
             }
         }
+    }
+
+    @ViewBuilder
+    private func steamReadyControls(for selected: RuntimeEnvironment) -> some View {
+        Text("直接在 Windows Steam 安裝、更新及遊玩。")
+            .foregroundStyle(.secondary)
+        Button("開啟 Steam") { Task { await launchSteam(in: selected.id) } }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+        if failedLaunchEnvironment == selected.id { retryButton(for: selected) }
+        Toggle("自動補齊遊戲的 Microsoft 共用元件", isOn: $autoRepairLibrary)
+            .help("開啟 Steam 前檢查已安裝遊戲。啟用後允許使用已驗證的 Microsoft 安裝器補齊元件。")
     }
 
     @ViewBuilder
