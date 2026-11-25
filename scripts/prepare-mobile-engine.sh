@@ -30,7 +30,10 @@ fi
 [[ "$(git -C "$workspace" remote get-url origin)" == "$upstream" ]]
 [[ "$(git -C "$workspace" rev-parse HEAD)" == "$revision" ]]
 git -C "$workspace" diff --cached --quiet HEAD --
-patch="$root/mobile/patches/0001-steam-first-research.patch"
+patches=(
+    "$root/mobile/patches/0001-steam-first-research.patch"
+    "$root/mobile/patches/0002-bootstrap-and-identity.patch"
+)
 if [[ "$research_ui" == 1 ]]; then
     # Validate the complete intended working tree against a temporary index.
     # Never overwrite a developer's modifications or reuse a dirty checkout.
@@ -38,10 +41,10 @@ if [[ "$research_ui" == 1 ]]; then
     rm -f "$index"
     trap 'rm -f "$index" "$index.lock"' EXIT
     GIT_INDEX_FILE="$index" git -C "$workspace" read-tree HEAD
-    GIT_INDEX_FILE="$index" git -C "$workspace" apply --cached "$patch"
+    GIT_INDEX_FILE="$index" git -C "$workspace" apply --cached "${patches[@]}"
     if git -C "$workspace" diff --quiet HEAD --; then
-        git -C "$workspace" apply --check "$patch"
-        git -C "$workspace" apply "$patch"
+        git -C "$workspace" apply --check "${patches[@]}"
+        git -C "$workspace" apply "${patches[@]}"
     fi
     GIT_INDEX_FILE="$index" git -C "$workspace" diff --quiet --ignore-submodules=all --
 else
