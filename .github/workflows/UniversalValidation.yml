@@ -26,6 +26,21 @@ jobs:
           git -C "$RUNNER_TEMP/madeira" apply --check "$GITHUB_WORKSPACE/mobile/patches/"*.patch
           git -C "$RUNNER_TEMP/madeira" apply "$GITHUB_WORKSPACE/mobile/patches/"*.patch
           git -C "$RUNNER_TEMP/madeira" diff --stat
+          for name in RuntimeDependencyPolicy PortableWindowsImportReader PortableLegacyGameAudit SteamDirectoryAudit; do
+            cmp "$GITHUB_WORKSPACE/WhiskyKit/Sources/GameBridgeCore/$name.swift" "$RUNNER_TEMP/madeira/app/Madeira/$name.swift"
+          done
+      - name: Check pinned engine source revisions
+        run: |
+          set -euo pipefail
+          for component in FEX wine dxmt madeira-dock; do
+            revision="$(git -C "$RUNNER_TEMP/madeira" ls-tree HEAD "$component" | awk '{print $3}')"
+            test "${#revision}" -eq 40
+            url="$(git -C "$RUNNER_TEMP/madeira" config -f .gitmodules --get "submodule.$component.url")"
+            case "$url" in https://github.com/*) ;; *) exit 1 ;; esac
+            git init -q "$RUNNER_TEMP/source-$component"
+            git -C "$RUNNER_TEMP/source-$component" -c protocol.version=2 fetch --depth=1 --filter=blob:none --no-recurse-submodules "$url" "$revision"
+            git -C "$RUNNER_TEMP/source-$component" cat-file -e "$revision^{commit}"
+          done
       - name: Verify official Steam bootstrap archive
         run: |
           set -euo pipefail
