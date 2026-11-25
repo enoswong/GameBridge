@@ -55,6 +55,14 @@ The first-run screen has a persistent, initially off option to prepare Microsoft
 
 CI now checks the top-level FEX, Wine, DXMT and Dock gitlink commits are obtainable without building them. Nested dependencies, native toolchains and the full IPA build remain separate gates.
 
+## Native iPhoneOS build attempt (sixth iteration)
+
+The standard `xcode-27` runner matches upstream's SDK generation. The dedicated [native build workflow](../.github/workflows/MobileResearchBuild.yml) starts on the workflow-file commit on this branch and records the actual SDK, storage and source resolution. It runs the full upstream source build in a separate overlay-hash workspace. Upstream's ordinary CI skips the i386 build because it expects another job's output; this isolated build uses its local-source path instead. No larger paid runner is configured. Standard runner storage, memory, dependencies and the six-hour job limit can still prevent a complete build.
+
+The local IPA verifier checks the app and extension identity, callback scheme, iPhone/iPad device-family declarations, native arm64 Mach-O and x86/x64 guest modules. Passing it is not evidence of development signing, JIT availability or Steam operation. The workflow intentionally does not upload or distribute an IPA: exact source/relink obligations, third-party terms and device acceptance remain open.
+
+The earlier source revision check confirmed all four top-level gitlink commits are fetchable. Recursive dependencies and complete native build have not yet been confirmed. See the workflow logs for actual results.
+
 ## Mobile integration sequence
 
 1. Clean source build for arm64 iPhoneOS and physical iPhone/iPad; verify architecture, entitlements, source provenance and redistribution rights.
