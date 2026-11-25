@@ -11,8 +11,16 @@ case "$mode" in
     --steam-first-prepare|--steam-first-build) research_ui=1 ;;
     *) echo "Usage: $0 [--prepare|--build|--steam-first-prepare|--steam-first-build]" >&2; exit 2 ;;
 esac
+patches=(
+    "$root/mobile/patches/0001-steam-first-research.patch"
+    "$root/mobile/patches/0002-bootstrap-and-identity.patch"
+    "$root/mobile/patches/0003-runtime-preparation.patch"
+)
 workspace="$root/build/mobile-research/madeira-$revision"
-if [[ "$research_ui" == 1 ]]; then workspace="$workspace-steam-first"; fi
+if [[ "$research_ui" == 1 ]]; then
+    overlay="$(cat "${patches[@]}" | git hash-object --stdin)"
+    workspace="$workspace-steam-first-$overlay"
+fi
 if [[ "$mode" == *build ]]; then
     [[ "$(uname -s)" == "Darwin" ]] || { echo "Xcode on macOS is required." >&2; exit 1; }
     command -v xcodebuild >/dev/null
@@ -30,11 +38,6 @@ fi
 [[ "$(git -C "$workspace" remote get-url origin)" == "$upstream" ]]
 [[ "$(git -C "$workspace" rev-parse HEAD)" == "$revision" ]]
 git -C "$workspace" diff --cached --quiet HEAD --
-patches=(
-    "$root/mobile/patches/0001-steam-first-research.patch"
-    "$root/mobile/patches/0002-bootstrap-and-identity.patch"
-    "$root/mobile/patches/0003-runtime-preparation.patch"
-)
 if [[ "$research_ui" == 1 ]]; then
     # Validate the complete intended working tree against a temporary index.
     # Never overwrite a developer's modifications or reuse a dirty checkout.
@@ -75,5 +78,11 @@ fi
 printf 'Pinned research checkout: %s\n' "$workspace"
 if [[ "$mode" == *build ]]; then
     printf 'Building mobile research IPA (not a GameBridge release).\n'
-    (cd "$workspace" && bash tools/build-ipa.sh)
+    # The upstream CI path assumes separate native/i386 cache jobs. Run the full
+    # local-source path on our isolated runner instead, including i386.
+    (cd "$workspace" && env -u GITHUB_ACTIONS -u MADEIRA_RUNTIME_REUSE -u MADEIRA_RUNTIME_SDK \
+        JOBS="${JOBS:-3}" bash tools/build-ipa.sh)
+    if [[ "$research_ui" == 1 ]]; then
+        python3 "$root/scripts/verify-mobile-research-ipa.py" "$workspace/dist/Madeira.ipa"
+    fi
 fi
