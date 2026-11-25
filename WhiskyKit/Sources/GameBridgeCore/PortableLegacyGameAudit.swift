@@ -86,7 +86,8 @@ public struct PortableLegacyGameAudit: Encodable, Sendable {
                 let system = systemNames(for: imports.architecture)
                 for name in imports.libraries {
                     let item = Import(
-                        name: name, architecture: imports.architecture, component: PortableLegacyGameAudit.component(for: name)
+                        name: name, architecture: imports.architecture,
+                        component: PortableLegacyGameAudit.component(for: name)
                     )
                     if item.component != nil { runtime.insert(item) }
                     if !name.hasPrefix("api-ms-win-"), !name.hasPrefix("ext-ms-win-"),
