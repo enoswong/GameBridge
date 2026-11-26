@@ -57,11 +57,21 @@ CI now checks the top-level FEX, Wine, DXMT and Dock gitlink commits are obtaina
 
 ## Native iPhoneOS build attempt (sixth iteration)
 
-The standard `xcode-27` runner matches upstream's SDK generation. The dedicated [native build workflow](../.github/workflows/MobileResearchBuild.yml) starts on the workflow-file commit on this branch and records the actual SDK, storage and source resolution. It runs the full upstream source build in a separate overlay-hash workspace. Upstream's ordinary CI skips the i386 build because it expects another job's output; this isolated build uses its local-source path instead. No larger paid runner is configured. Standard runner storage, memory, dependencies and the six-hour job limit can still prevent a complete build.
+The standard `xcode-27` runner matches upstream's SDK generation. The dedicated [native build workflow](../.github/workflows/MobileResearchBuild.yml) starts when PR #2 receives the `ios-native-build` label (or by manual workflow dispatch when available) and records the actual SDK, storage and source resolution. It runs the full upstream source build in a separate overlay-hash workspace. Upstream's ordinary CI skips the i386 build because it expects another job's output; this isolated build uses its local-source path instead. No larger paid runner is configured. Standard runner storage, memory, dependencies and the six-hour job limit can still prevent a complete build.
 
 The local IPA verifier checks the app and extension identity, callback scheme, iPhone/iPad device-family declarations, native arm64 Mach-O and x86/x64 guest modules. Passing it is not evidence of development signing, JIT availability or Steam operation. The workflow intentionally does not upload or distribute an IPA: exact source/relink obligations, third-party terms and device acceptance remain open.
 
 The earlier source revision check confirmed all four top-level gitlink commits are fetchable. Recursive dependencies and complete native build have not yet been confirmed. See the workflow logs for actual results.
+
+## iPhone-first acceptance (seventh iteration)
+
+Prioritize the iPhone before device-specific iPadOS and macOS additions. The last green baseline (a10df97) passed 64 package tests, strict lint (zero violations), Mac Debug build, iOS simulator core typecheck and pinned source/bootstrap checks.
+
+The mobile home screen now checks development signing before downloading Steam, distinguishes bootstrap/download, dependency checks, optional VC preparation and JIT waiting, and provides a manually shareable diagnostic summary. The summary deliberately excludes user identity, file paths, credentials and raw logs. A failed optional VC preparation preserves the existing files and does not alone block Steam; an active guest still blocks changes and a new launch.
+
+The regular validation workflow now also typechecks the portable core with the arm64 iPhoneOS SDK, parses the patched upstream Swift sources and checks the patched project and Info.plist. This is independent of the full native link. The IPA verifier requires the JITHelper and MemoryHost extensions, exact bundle IDs, native arm64 executable headers and x86/x64 guest modules; synthetic structure tests do not prove a working IPA.
+
+Native build is explicitly triggered to prevent repeated source or documentation commits from cancelling lengthy builds. On-device acceptance remains: development-signed installation, permitted JIT, first bootstrap and Steam self-update, actual Valve desktop UI and login, game download/update and launch, input and save/resume on a physical iPhone. No personal account use until security checks pass. No IPA distribution before the provenance/relink and signing gates are satisfied.
 
 ## Mobile integration sequence
 
