@@ -32,6 +32,11 @@ jobs:
           df -h .
           rustup --version
           python3 --version
+      - name: Download and verify Microsoft runtime on native runner
+        run: |
+          input="$RUNNER_TEMP/vc_redist.x64.exe"
+          bash scripts/fetch-mobile-vcruntime.sh --fetch "$input"
+          printf 'VC_REDIST_X64=%s\n' "$input" >> "$GITHUB_ENV"
       - name: Resolve all pinned source dependencies
         run: bash scripts/prepare-mobile-engine.sh --steam-first-prepare
       - name: Compile mobile engine and validate local research IPA
