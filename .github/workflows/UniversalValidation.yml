@@ -15,6 +15,8 @@ jobs:
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
+      - name: Test IPA structure verifier
+        run: python3 scripts/test-mobile-ipa-verifier.py
       - name: Check research script syntax
         run: bash -n scripts/prepare-mobile-engine.sh
       - name: Verify desktop Steam patch against pinned upstream
