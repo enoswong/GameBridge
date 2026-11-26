@@ -21,6 +21,21 @@ jobs:
         run: python3 scripts/test-iphone-development-signing.py
       - name: Check research script syntax
         run: bash -n scripts/prepare-mobile-engine.sh
+      - name: Verify fixed Microsoft runtime download before native build
+        run: |
+          bash -n scripts/fetch-mobile-vcruntime.sh
+          bash scripts/fetch-mobile-vcruntime.sh --fetch "$RUNNER_TEMP/vc_redist.x64.exe"
+          bash scripts/fetch-mobile-vcruntime.sh --verify "$RUNNER_TEMP/vc_redist.x64.exe"
+          printf MZ > "$RUNNER_TEMP/invalid-runtime.exe"
+          if bash scripts/fetch-mobile-vcruntime.sh --verify "$RUNNER_TEMP/invalid-runtime.exe"; then
+            echo "Invalid runtime unexpectedly accepted" >&2
+            exit 1
+          fi
+          ln -s "$RUNNER_TEMP/vc_redist.x64.exe" "$RUNNER_TEMP/linked-runtime.exe"
+          if bash scripts/fetch-mobile-vcruntime.sh --verify "$RUNNER_TEMP/linked-runtime.exe"; then
+            echo "Linked runtime unexpectedly accepted" >&2
+            exit 1
+          fi
       - name: Verify desktop Steam patch against pinned upstream
         run: |
           git init "$RUNNER_TEMP/madeira"
