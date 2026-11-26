@@ -73,6 +73,18 @@ The regular validation workflow now also typechecks the portable core with the a
 
 Native build is explicitly triggered to prevent repeated source or documentation commits from cancelling lengthy builds. On-device acceptance remains: development-signed installation, permitted JIT, first bootstrap and Steam self-update, actual Valve desktop UI and login, game download/update and launch, input and save/resume on a physical iPhone. No personal account use until security checks pass. No IPA distribution before the provenance/relink and signing gates are satisfied.
 
+## Local iPhone development signing check (eighth iteration)
+
+After a research build has passed the native IPA structure gate, build/sign locally with a permitted Apple development identity and its app/extension provisioning profiles. Before installing the resulting development-signed app, run on that Mac:
+
+```sh
+python3 scripts/check-iphone-development-signing.py /path/to/Madeira.app
+```
+
+Optionally pass `--device` with the target iPhone's local UDID to check membership in each provisioning profile. The checker verifies the app's recursive code signature, exact research app and helper identities, development profile expiration, certificate membership, team/application identifiers and main-app debugging entitlement. It reports requested JIT and memory entitlements as present/absent; it does not assume they confer runtime access. It reads profiles and certificates locally, does not print device identifiers or account data and makes no network request. It never signs, changes or installs an app. Synthetic policy tests cover valid and invalid profiles; real signed-app checks require macOS and actual development provisioning.
+
+The native build initiated at 1db1e7a is a frozen source snapshot; its job remains separate from these signing tools. Do not confuse the upstream ad-hoc IPA with a development-signed installation. The CI build does not publish or upload the IPA, and public distribution remains blocked by the existing provenance/relink gates.
+
 ## Mobile integration sequence
 
 1. Clean source build for arm64 iPhoneOS and physical iPhone/iPad; verify architecture, entitlements, source provenance and redistribution rights.
