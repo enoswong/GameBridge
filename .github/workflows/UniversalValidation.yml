@@ -71,6 +71,23 @@ jobs:
             -target arm64-apple-ios17.0-simulator \
             -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" \
             -typecheck WhiskyKit/Sources/GameBridgeCore/*.swift
+      - name: Typecheck portable core for physical iPhone SDK
+        run: |
+          xcrun --sdk iphoneos swiftc \
+            -target arm64-apple-ios18.0 \
+            -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
+            -typecheck WhiskyKit/Sources/GameBridgeCore/*.swift
+      - name: Parse actual mobile overlay sources
+        run: |
+          git init "$RUNNER_TEMP/madeira-ios"
+          git -C "$RUNNER_TEMP/madeira-ios" remote add origin https://github.com/willfaust/Madeira.git
+          git -C "$RUNNER_TEMP/madeira-ios" fetch --depth=1 origin fbad430410b4075192166172447c859714726de9
+          git -C "$RUNNER_TEMP/madeira-ios" checkout --detach FETCH_HEAD
+          git -C "$RUNNER_TEMP/madeira-ios" apply "$GITHUB_WORKSPACE/mobile/patches/"*.patch
+          xcrun --sdk iphoneos swiftc -frontend -parse -swift-version 5 \
+            -target arm64-apple-ios18.0 -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
+            "$RUNNER_TEMP/madeira-ios/app/Madeira/"{ContentView,Library,MadeiraApp,SteamRuntime,VCRedist,JITNetwork,RuntimeDependencyPolicy,PortableWindowsImportReader,PortableLegacyGameAudit,SteamDirectoryAudit}.swift
+          xcrun plutil -lint "$RUNNER_TEMP/madeira-ios/app/Madeira/Info.plist" "$RUNNER_TEMP/madeira-ios/app/Madeira.xcodeproj/project.pbxproj"
       - name: Resolve app dependencies
         run: |
           xcodebuild -resolvePackageDependencies -project Whisky.xcodeproj \
