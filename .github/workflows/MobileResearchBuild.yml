@@ -4,6 +4,10 @@ on:
     branches: [gamebridge-universal]
     paths:
       - '.github/workflows/MobileResearchBuild.yml'
+  pull_request:
+    branches: [codex/gamebridge-guided-steam]
+    paths:
+      - '.github/workflows/MobileResearchBuild.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,6 +17,7 @@ concurrency:
 jobs:
   native-source-build:
     # Standard public repository runner, matching the upstream SDK generation.
+    if: github.event_name != 'pull_request' || github.head_ref == 'gamebridge-universal'
     runs-on: xcode-27
     timeout-minutes: 360
     env:
