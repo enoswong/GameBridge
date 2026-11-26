@@ -46,6 +46,15 @@ def verify(path):
         require(pe_machine(archive, "arm64ec-windows/xtajit64.dll") in {0xa641, 0x8664},
                 "missing x64 translation module")
         require(pe_machine(archive, "i386-windows/ntdll.dll") == 0x14c, "missing x86 guest runtime")
+        for extension in ("JITHelper", "MemoryHost"):
+            folder = ROOT + "PlugIns/Madeira" + extension + ".appex/"
+            ext = plistlib.loads(archive.read(folder + "Info.plist"))
+            require(ext.get("CFBundleIdentifier") == BUNDLE + "." + extension,
+                    "extension identity mismatch: " + extension)
+            with archive.open(folder + ext["CFBundleExecutable"]) as f:
+                magic, cpu = struct.unpack("<II", f.read(8))
+            require(magic == 0xfeedfacf and cpu == 0x0100000c,
+                    "extension is not arm64 Mach-O: " + extension)
         for name in names:
             if name.startswith(ROOT + "PlugIns/") and name.endswith(".appex/Info.plist"):
                 ext = plistlib.loads(archive.read(name))
