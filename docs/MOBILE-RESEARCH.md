@@ -85,6 +85,23 @@ Optionally pass `--device` with the target iPhone's local UDID to check membersh
 
 The native build initiated at 1db1e7a is a frozen source snapshot; its job remains separate from these signing tools. Do not confuse the upstream ad-hoc IPA with a development-signed installation. The CI build does not publish or upload the IPA, and public distribution remains blocked by the existing provenance/relink gates.
 
+## Native build recovery and first iPhone acceptance target
+
+The first full native build (run 45736337461) resolved all recursive source dependencies and compiled DXMT's 88 checked units, with zero failures in that group. It stopped at Microsoft's moving `aka.ms` x64 VC runtime download with curl exit 6 (DNS failure), before completion of the remaining runtime build and app link. This is not evidence of a completed IPA.
+
+The recovery fetch uses the same fixed Microsoft x64 package as the mobile runtime installer (14.44.35211.0, 25,635,768 bytes, SHA-256 cc0ff0eb1dc3f5188ae6300faef32bf5beeba4bdd6e8e445a9184072096b713b). It verifies HTTPS, exact size, MZ and hash before making the file available to the original extractor. CI checks this dependency on the native runner before resolving and compiling the engine; the build wrapper also runs extraction before the expensive native compile. A bad or missing package stops the build. Do not weaken the hash pin or substitute an unofficial mirror. An exact locally downloaded package can be passed as `VC_REDIST_X64`, with the same verification. No package is committed or uploaded by this workflow.
+
+The initial physical target is iPhone 17 with iOS 27.3, using a Mac for local development signing and debugging. No device-specific JIT or DDI compatibility is claimed yet. The first native run used Xcode 27.1; the Mac's installed Xcode and device-support availability for the exact iOS version must be checked locally before the first connection. A development signing check, Developer Mode and permitted JIT configuration precede starting Steam. Device pairing material, signing credentials and device identifiers stay on the Mac/iPhone; do not add them to GitHub, CI secrets or diagnostic reports.
+
+For a developer with macOS and the reviewed native toolchain, the existing build wrapper accepts an optional exact local installer:
+
+```sh
+VC_REDIST_X64="/absolute/path/to/VC_redist.x64.exe" \
+  bash scripts/prepare-mobile-engine.sh --steam-first-build
+```
+
+This is a source build path for local research, not an instruction to install an unverified IPA. Continue with the development-signing gate above only after successful native build. Record physical iPhone results separately for Steam self-update, WebHelper rendering, login, install/update/verify, 32-bit and 64-bit games, touch and keyboard, exit and recovery. A failure at any gate remains an open issue.
+
 ## Mobile integration sequence
 
 1. Clean source build for arm64 iPhoneOS and physical iPhone/iPad; verify architecture, entitlements, source provenance and redistribution rights.
