@@ -17,7 +17,7 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
              .navigationBarTitleDisplayMode(.inline)
              .toolbarBackground(.regularMaterial, for: .navigationBar)
              // The library keeps a material bar only before iOS 26. From iOS 26 the
-@@ -1399,12 +1398,102 @@
+@@ -1399,12 +1398,152 @@
              }
              // A Home Screen shortcut (madeira://play?exe=...) starts its library entry,
              // now or, from a cold start, once the library is up.
@@ -30,6 +30,7 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 -    /// The developer interface. Orientation comes from the view's own shape, not
 +    @State private var gameBridgePreparing = false
 +    @State private var gameBridgeAuditMessage = ""
++    @State private var gameBridgeStage = "Ready to check"
 +    @AppStorage("GameBridge.autoPrepareVC") private var gameBridgeAutoPrepareVC = false
 +    // GameBridge research: use the existing in-process Wine desktop session, not Dock.
 +    private var gameBridgeSteamHome: some View {
@@ -50,8 +51,11 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +                .controlSize(.large)
 +                .disabled(gameBridgePreparing || library.startingJIT != nil || library.launching)
 +                if gameBridgePreparing {
-+                    ProgressView("Preparing Steam and checking game dependencies…")
++                    ProgressView(gameBridgeStage)
++                } else if library.startingJIT != nil {
++                    ProgressView("Waiting for JIT permission…")
 +                }
++                Text(gameBridgeStage).font(.caption).foregroundStyle(.secondary)
 +                Toggle("Automatically prepare Microsoft Visual C++ 2015–2022", isOn: $gameBridgeAutoPrepareVC)
 +                    .disabled(gameBridgePreparing || library.startingJIT != nil)
 +                Text("Microsoft redistributable licence terms apply. Existing custom runtime folders are preserved.")
@@ -64,7 +68,16 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +                }
 +                Button("Enable JIT") { enableJIT() }
 +                    .buttonStyle(.bordered)
-+                    .disabled(gameBridgePreparing || library.startingJIT != nil)
++                    .disabled(gameBridgePreparing || library.startingJIT != nil || jitStatus == .testing)
++                DisclosureGroup("iPhone diagnostics") {
++                    Text(gameBridgeDiagnostics)
++                        .font(.caption.monospaced())
++                        .textSelection(.enabled)
++                        .frame(maxWidth: .infinity, alignment: .leading)
++                    ShareLink(item: gameBridgeDiagnostics) {
++                        Label("Share diagnostic summary", systemImage: "square.and.arrow.up")
++                    }
++                }
 +            }
 +            .padding(24)
 +            .frame(maxWidth: 480)
@@ -73,9 +86,15 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +    }
 +
 +    private func gameBridgeOpenSteam() {
-+        guard !gameBridgePreparing, library.current == nil,
++        guard !gameBridgePreparing, library.current == nil, library.startingJIT == nil,
++              !library.launching, !VCRedistModel.shared.busy,
 +              wine_process_is_running() == 0, wineserver_is_running() == 0 else { return }
 +        library.error = nil
++        guard SigningStatus.current.debuggable else {
++            gameBridgeStage = "Development signing required"
++            library.error = "Install a development-signed research build with get-task-allow before enabling JIT."
++            return
++        }
 +        gameBridgeAuditMessage = ""
 +        gameBridgePreparing = true
 +        Task { @MainActor in
@@ -86,21 +105,52 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +                }
 +                let prefix = documents.appendingPathComponent("wine")
 +                if !LibraryEntry.steamClientInstalled {
++                    gameBridgeStage = "Downloading and verifying official Steam…"
 +                    try await SteamRuntimeInstaller.shared.prepareDesktopBootstrap(prefix: prefix)
 +                }
 +                guard LibraryEntry.steamClientInstalled else { throw SteamRuntimeFiles.Failure.invalidPackage }
++                gameBridgeStage = "Checking game dependencies…"
 +                await gameBridgeAudit(prefix: prefix)
 +                if gameBridgeAutoPrepareVC {
-+                    try await VCRedistModel.shared.prepareForSteam()
-+                    LogStore.shared.log("[gamebridge] Visual C++ v14 preparation checked; overlay applies at guest startup.")
++                    gameBridgeStage = "Preparing Visual C++ runtimes…"
++                    do {
++                        try await VCRedistModel.shared.prepareForSteam()
++                        LogStore.shared.log("[gamebridge] Visual C++ v14 checked; overlay applies at guest startup.")
++                    } catch {
++                        try Task.checkCancellation()
++                        gameBridgeAuditMessage += " Optional Visual C++ preparation incomplete; existing files kept."
++                        LogStore.shared.log("[gamebridge] optional VC preparation incomplete: \(error.localizedDescription)")
++                    }
 +                }
 +                guard library.current == nil, wine_process_is_running() == 0,
 +                      wineserver_is_running() == 0 else { throw SteamRuntimeFiles.Failure.activeSession }
++                gameBridgeStage = "Requesting local Windows Steam session"
 +                launchLibraryEntry(.bigPictureEntry)
 +            } catch {
++                gameBridgeStage = "Preparation incomplete"
 +                library.error = error.localizedDescription
 +            }
 +        }
++    }
++
++    /// Deliberately excludes file paths, device identifiers, account names and raw logs.
++    private var gameBridgeDiagnostics: String {
++        let memory = ProcessInfo.processInfo.physicalMemory / (1024 * 1024)
++        let signing = SigningStatus.current.debuggable ? "development/debuggable" : "not debuggable"
++        let ready = StikJITHelper.ready ? "ready" : "not ready"
++        let bootstrap = LibraryEntry.steamClientInstalled ? "present" : "absent"
++        let guest = wine_process_is_running() != 0 || wineserver_is_running() != 0 ? "active" : "idle"
++        return [
++            "GameBridge iOS research",
++            "OS: \(UIDevice.current.systemVersion)",
++            "Physical memory MiB: \(memory)",
++            "Signing: \(signing)",
++            "JIT: \(ready)",
++            "Steam bootstrap: \(bootstrap)",
++            "Wine session: \(guest)",
++            "Last requested stage: \(gameBridgeStage)",
++            "Steam login and gameplay acceptance: unverified"
++        ].joined(separator: "\n")
 +    }
 +
 +    private func gameBridgeAudit(prefix: URL) async {
