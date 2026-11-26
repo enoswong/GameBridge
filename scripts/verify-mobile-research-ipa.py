@@ -27,6 +27,15 @@ def pe_machine(archive, name):
         return struct.unpack_from("<H", pe, 4)[0]
 
 
+def require_arm64_executable(archive, name):
+    with archive.open(name) as f:
+        header = f.read(32)
+    require(len(header) == 32, "truncated Mach-O header: " + name)
+    magic, cpu, _, filetype, _, _, _, _ = struct.unpack("<8I", header)
+    require(magic == 0xfeedfacf and cpu == 0x0100000c and filetype == 2,
+            "not a thin arm64 Mach-O executable: " + name)
+
+
 def verify(path):
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
@@ -40,9 +49,7 @@ def verify(path):
                    for scheme in item.get("CFBundleURLSchemes", [])]
         require("gamebridge-research" in schemes and "madeira" not in schemes, "incorrect callback scheme")
         executable = info["CFBundleExecutable"]
-        with archive.open(ROOT + executable) as f:
-            magic, cpu = struct.unpack("<II", f.read(8))
-        require(magic == 0xfeedfacf and cpu == 0x0100000c, "app is not arm64 Mach-O")
+        require_arm64_executable(archive, ROOT + executable)
         require(pe_machine(archive, "arm64ec-windows/xtajit64.dll") in {0xa641, 0x8664},
                 "missing x64 translation module")
         require(pe_machine(archive, "i386-windows/ntdll.dll") == 0x14c, "missing x86 guest runtime")
@@ -51,10 +58,7 @@ def verify(path):
             ext = plistlib.loads(archive.read(folder + "Info.plist"))
             require(ext.get("CFBundleIdentifier") == BUNDLE + "." + extension,
                     "extension identity mismatch: " + extension)
-            with archive.open(folder + ext["CFBundleExecutable"]) as f:
-                magic, cpu = struct.unpack("<II", f.read(8))
-            require(magic == 0xfeedfacf and cpu == 0x0100000c,
-                    "extension is not arm64 Mach-O: " + extension)
+            require_arm64_executable(archive, folder + ext["CFBundleExecutable"])
         for name in names:
             if name.startswith(ROOT + "PlugIns/") and name.endswith(".appex/Info.plist"):
                 ext = plistlib.loads(archive.read(name))
