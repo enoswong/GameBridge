@@ -77,11 +77,22 @@ if grep -Eq '^[-+U]' <<< "$status"; then
 fi
 printf 'Pinned research checkout: %s\n' "$workspace"
 if [[ "$mode" == *build ]]; then
+    # Verify the Microsoft build input before expensive native compilation.
+    # VC_REDIST_X64 can point to a locally obtained copy of the exact same pinned file.
+    if [[ -n "${VC_REDIST_X64:-}" ]]; then
+        vc_input="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$VC_REDIST_X64")"
+        bash "$root/scripts/fetch-mobile-vcruntime.sh" --verify "$vc_input"
+    else
+        vc_input="$root/build/mobile-research/inputs/vc_redist.x64-14.44.35211.0.exe"
+        bash "$root/scripts/fetch-mobile-vcruntime.sh" --fetch "$vc_input"
+    fi
+    command -v 7zz >/dev/null || brew install sevenzip
+    ROOT="$workspace" VC_REDIST_X64="$vc_input" bash "$workspace/tools/build/prepare-vcruntime.sh"
     printf 'Building mobile research IPA (not a GameBridge release).\n'
     # The upstream CI path assumes separate native/i386 cache jobs. Run the full
     # local-source path on our isolated runner instead, including i386.
     (cd "$workspace" && env -u GITHUB_ACTIONS -u MADEIRA_RUNTIME_REUSE -u MADEIRA_RUNTIME_SDK \
-        JOBS="${JOBS:-3}" bash tools/build-ipa.sh)
+        JOBS="${JOBS:-3}" VC_REDIST_X64="$vc_input" bash tools/build-ipa.sh)
     if [[ "$research_ui" == 1 ]]; then
         python3 "$root/scripts/verify-mobile-research-ipa.py" "$workspace/dist/Madeira.ipa"
     fi
