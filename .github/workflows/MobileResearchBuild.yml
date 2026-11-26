@@ -1,13 +1,8 @@
 name: Mobile research native build
 on:
-  push:
-    branches: [gamebridge-universal]
-    paths:
-      - '.github/workflows/MobileResearchBuild.yml'
   pull_request:
     branches: [codex/gamebridge-guided-steam]
-    paths:
-      - '.github/workflows/MobileResearchBuild.yml'
+    types: [labeled]
   workflow_dispatch:
 permissions:
   contents: read
@@ -17,7 +12,7 @@ concurrency:
 jobs:
   native-source-build:
     # Standard public repository runner, matching the upstream SDK generation.
-    if: github.event_name != 'pull_request' || github.head_ref == 'gamebridge-universal'
+    if: github.event_name == 'workflow_dispatch' || (github.head_ref == 'gamebridge-universal' && github.event.label.name == 'ios-native-build')
     runs-on: xcode-27
     timeout-minutes: 360
     env:
