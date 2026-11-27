@@ -13,7 +13,8 @@ final class MobileSupportCatalogTests: XCTestCase {
         let suffix = String(repeating: "b", count: 40)
         let names = ["steam_win32.zip.", "bins_win32.zip.", "bins_win64_win32.zip."]
         let packages = names.enumerated().map { index, name in
-            ["file": badPath && index == 0 ? "../bad.zip" : name + suffix, "bytes": 123, "sha256": hash] as [String: Any]
+            ["file": badPath && index == 0 ? "../bad.zip" : name + suffix,
+             "bytes": 123, "sha256": hash] as [String: Any]
         }
         return ["schemaVersion": 1, "revision": revision, "issuedAt": now - 10,
                 "expiresAt": expires ?? now + 3600, "packages": packages, "clientSHA256": hash]
@@ -28,7 +29,9 @@ final class MobileSupportCatalogTests: XCTestCase {
         ])
     }
 
-    private func verify(_ data: Data, revision: Int = 0, digest: String? = nil) throws -> MobileSupportCatalog.Verified {
+    private func verify(
+        _ data: Data, revision: Int = 0, digest: String? = nil
+    ) throws -> MobileSupportCatalog.Verified {
         try MobileSupportCatalog.verify(data, keyID: "fixture", publicKey: key.publicKey.rawRepresentation,
                                         now: now, minimumRevision: revision, acceptedDigest: digest)
     }
