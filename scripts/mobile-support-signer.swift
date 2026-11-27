@@ -44,6 +44,10 @@ struct MobileCatalogSigner {
             print("Verified support catalog revision \(verified.payload.revision)")
             return
         }
+        if args.count == 4 && args[0] == "renew-payload" {
+            try renewPayload(keyPath: args[1], envelopePath: args[2], outputPath: args[3])
+            return
+        }
         if args.count == 4 && args[0] == "sign" {
             try sign(keyPath: args[1], payloadPath: args[2], outputPath: args[3])
             return
@@ -51,6 +55,7 @@ struct MobileCatalogSigner {
         print("Usage: mobile-support-signer init-key PRIVATE_KEY | sign PRIVATE_KEY PAYLOAD_JSON ENVELOPE_JSON")
         print("       mobile-support-signer verify KEY_ID PUBLIC_KEY_BASE64 ENVELOPE_JSON")
         print("       mobile-support-signer public-key PRIVATE_KEY")
+        print("       mobile-support-signer renew-payload PRIVATE_KEY PREVIOUS_ENVELOPE OUTPUT_PAYLOAD")
         exit(2)
     }
 
@@ -75,5 +80,31 @@ struct MobileCatalogSigner {
             publicKey: key.publicKey.rawRepresentation, now: Int(Date().timeIntervalSince1970))
         try envelope.write(to: URL(fileURLWithPath: outputPath), options: .withoutOverwriting)
         print("Signed and verified catalog revision \(verified.payload.revision)")
+    }
+
+    /// Renewal accepts expired historical metadata only after authenticating it at its original issue time.
+    /// This is a maintainer-only operation; the app still rejects expired catalogs.
+    private static func renewPayload(keyPath: String, envelopePath: String, outputPath: String) throws {
+        let key = try Curve25519.Signing.PrivateKey(
+            rawRepresentation: Data(contentsOf: URL(fileURLWithPath: keyPath)))
+        let data = try Data(contentsOf: URL(fileURLWithPath: envelopePath))
+        guard data.count <= MobileSupportCatalog.maxEnvelopeBytes else {
+            throw MobileSupportCatalog.Failure.invalidCatalog
+        }
+        let envelope = try JSONDecoder().decode(MobileSupportCatalog.Envelope.self, from: data)
+        let previous = try JSONDecoder().decode(MobileSupportCatalog.Payload.self, from: envelope.payload)
+        let now = Int(Date().timeIntervalSince1970)
+        guard previous.issuedAt <= now, previous.revision < Int.max else {
+            throw MobileSupportCatalog.Failure.invalidCatalog
+        }
+        _ = try MobileSupportCatalog.verify(data, keyID: keyID(key), publicKey: key.publicKey.rawRepresentation,
+                                            now: previous.issuedAt)
+        var payload = try JSONSerialization.jsonObject(with: envelope.payload) as? [String: Any] ?? [:]
+        payload["revision"] = previous.revision + 1
+        payload["issuedAt"] = now - 60
+        payload["expiresAt"] = now + 30 * 86400
+        let renewed = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        try renewed.write(to: URL(fileURLWithPath: outputPath), options: .withoutOverwriting)
+        print("Prepared unsigned renewal revision \(previous.revision + 1); verify archives and sign separately.")
     }
 }
