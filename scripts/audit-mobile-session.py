@@ -11,7 +11,8 @@ def analyze(lines, expected_game=None):
              webhelper_spawn_count=0, gpu_requested=None, v8_jit_requested=None,
              config_present=None, cjk_install_events=0, expected_game_spawn_observed=False,
              assessment='insufficient_evidence')
-    session_markers = 0
+    config_markers = 0
+    wine_start_markers = 0
 
     def maximum(key, value):
         r[key] = value if r[key] is None else max(r[key], value)
@@ -46,8 +47,13 @@ def analyze(lines, expected_game=None):
             r['v8_jit_requested'] = True
         if 'madeira.cfg absent: legacy' in line:
             r['config_present'] = False
-            session_markers += 1
-    if session_markers > 1:
+            config_markers += 1
+        elif re.search(r'^(?:\[[^\]]+\]\s*)*madeira\.cfg:', line):
+            r['config_present'] = True
+            config_markers += 1
+        if re.search(r'\[phase\] wine-start\s+t\+', line):
+            wine_start_markers += 1
+    if max(config_markers, wine_start_markers) > 1:
         r['assessment'] = 'multiple_session_markers'
     elif r['expected_game_spawn_observed']:
         r['assessment'] = 'game_spawn_only'
