@@ -33,6 +33,22 @@ Start from mobile/support/steam-seed.template.json. Set issuedAt/expiresAt to ac
 
 Publish only the signed envelope to the support-catalog branch at mobile/steam-seed.json. A template with zero dates is not a valid catalog. The verifier checks Ed25519, schema, scope, package names, expiry, monotonic revision and equal-revision payload identity. An accepted catalog is cached locally for offline use until it expires. Once a remote revision has been accepted, an expired or invalid cache blocks a new repair rather than silently reverting to older pins. A new unconfigured install may use the shipped verified pins.
 
+## GitHub publishing workflow
+
+The dedicated support-catalog branch now contains a publication validation workflow. It uses a fixed verifier source revision, checks the signed envelope against public trust.json, compares the previous published revision and trust identity, then fetches the three Valve packages and verifies their hashes and coherent inventory. This is an Actions check on push/PR, not a configured branch protection rule; clients independently enforce their embedded trust anchor. No signing key is present on the branch or in Actions secrets.
+
+For initial provisioning, on the maintainer's Mac use a separate clean checkout of gamebridge-universal (preserve any existing Xcode edits in GameBridge-iOS):
+
+    bash scripts/init-mobile-support-channel.sh
+
+This generates the key locally if absent, refuses to overwrite an existing initial release, verifies the official archives and prepares only steam-seed.json and trust.json under ~/.gamebridge-support/release-1. Share or publish only those two files, never the key or its parent directory. The initial revision is 1 and expires in 30 days. The public key must still be embedded in the native app once. The existing installed research build cannot consume this catalog until updated.
+
+For each subsequent release, use the reviewed payload with a higher revision and fresh dates:
+
+    bash scripts/prepare-mobile-support-release.sh /path/to/reviewed-payload.json /path/to/new-public-output
+
+Publish both public JSON files together to the support-catalog branch, preferably through a PR with the validation check passing. A 30-day renewal requires the maintainer's offline signature even when package pins remain unchanged. Do not rotate trust on this branch alone. The workflow detects invalid/deleted metadata, unchanged-revision content changes and trust replacement relative to the previous commit. This does not automate discovering newer official packages or certify their runtime compatibility.
+
 ## Reporting and triage
 
 Before preparation, after preparation/failure and when a session ends, store a small known-module PE status report locally. The Wine log hook additionally collects bounded, deduplicated module-not-found/load-failed DLL basenames, even when live log display is suppressed. It does not capture raw paths, Steam passwords, account identifiers, tokens, pairing files or full logs. Not every graphical fatal dialog emits a parsable log; static presence cannot prove the runtime loader can load a file.
