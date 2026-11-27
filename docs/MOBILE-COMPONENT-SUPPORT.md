@@ -1,6 +1,6 @@
 # GameBridge mobile component support
 
-Status: research, not a production update channel yet.
+Status: research. Maintainer public trust received and verified, initial signed catalog publication PR #4 pending validation/merge. No production iPhone acceptance yet.
 
 ## Independent release boundaries
 
@@ -41,7 +41,7 @@ For initial provisioning, on the maintainer's Mac use a separate clean checkout 
 
     bash scripts/init-mobile-support-channel.sh
 
-This generates the key locally if absent, refuses to overwrite an existing initial release, verifies the official archives and prepares only steam-seed.json and trust.json under ~/.gamebridge-support/release-1. Share or publish only those two files, never the key or its parent directory. The initial revision is 1 and expires in 30 days. The public key must still be embedded in the native app once. The existing installed research build cannot consume this catalog until updated.
+This generates the key locally if absent, refuses to overwrite an existing initial release, verifies the official archives and prepares only steam-seed.json and trust.json under ~/.gamebridge-support/release-1. Share or publish only those two files, never the key or its parent directory. The initial revision is 1 and expires in 30 days. The supplied maintainer public key is now embedded in the development overlay. Earlier installed builds still require a one-time source/app update. The existing installed research build cannot consume this catalog until updated.
 
 For each subsequent release, use the reviewed payload with a higher revision and fresh dates:
 
@@ -49,7 +49,7 @@ For each subsequent release, use the reviewed payload with a higher revision and
 
 Publish both public JSON files together to the support-catalog branch, preferably through a PR with the validation check passing. A 30-day renewal requires the maintainer's offline signature even when package pins remain unchanged. Do not rotate trust on this branch alone. The workflow detects invalid/deleted metadata, unchanged-revision content changes and trust replacement relative to the previous commit. This does not automate discovering newer official packages or certify their runtime compatibility.
 
-The repository is public and its default branch is main (verified through repository metadata). Apps do not need a GitHub token to fetch the signed raw catalog. The current support-catalog branch contains no active trust.json or steam-seed.json.
+The repository is public and its default branch is main (verified through repository metadata). Apps do not need a GitHub token to fetch the signed raw catalog. The initial public trust and signed revision 1 are prepared in PR #4. The support-catalog branch becomes active only when publication is validated and merged.
 
 To create an atomic review branch containing both public files from the maintainer's existing Git login:
 
@@ -105,7 +105,7 @@ After generating the initial signed release locally and updating the original Xc
 
 Close Xcode before applying. The tool verifies public-key identity and the signed envelope, embeds only two public values in the research Info.plist, and preserves the original file in a local backup. It refuses an absent overlay or different embedded key. It reads no private key and changes no signing entitlements, project settings or native runtime artifacts. Rebuild and sign the app once using the existing device setup. This local plist edit must be preserved in future source migrations. The support-catalog branch still needs both public JSON files published; merely embedding a key does not activate the remote channel.
 
-A separate operations-only PR #3 proposes default-branch monitoring and issue triage without merging native source or distributing any binaries. It pins the previously validated verifier revision. No merge or live issue/scheduled-job execution is claimed.
+A separate operations-only PR #3 proposes default-branch monitoring and issue triage without merging native source or distributing any binaries. It pins the verifier and compares the published trust against the maintainer public trust recorded in the development source. No merge or live issue/scheduled-job execution is claimed.
 
 ## Reporting and triage
 
@@ -120,3 +120,7 @@ Future optional automatic reporting must be consent-based, bounded, rate-limited
 ## First physical result
 
 iPhone 17 / iOS 27.3 displayed the Wine desktop and Valve's Steam fatal dialog for bin/vgui2_s.dll. CI verified the official x86 module (3,266,200 bytes) is inside the pinned bins_win32 archive. This establishes the module source, not whether the user's device lacks the file or fails to load an existing copy. New support implementation, next signed installation and Steam desktop startup still require validation. No public IPA is published.
+
+## Initial maintainer trust
+
+Revision 1, key ID `98c7f873c4973474`, was independently verified using Ed25519 against the supplied public key. The signed payload uses the same three official Steam archives as the reviewed seed, issued 2026-11-27 10:35:34 UTC, expiring 2026-12-27 10:36:34 UTC. Public metadata only is in PR #4. The original signed payload and signature are unchanged (JSON envelope whitespace may differ). The next iPhone build contains the public anchor; no private signing key was received or published. The full native build at b373669 remains evidence for the earlier overlay, not a native build of the new embedded key.
