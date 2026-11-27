@@ -27,6 +27,7 @@ jobs:
         run: |
           bash -n scripts/prepare-mobile-engine.sh
           bash -n scripts/prepare-mobile-cjk-fonts.sh
+          bash -n scripts/upgrade-iphone-steam-support.sh
       - name: Verify fixed Microsoft runtime download before native build
         run: |
           bash -n scripts/fetch-mobile-vcruntime.sh
@@ -126,7 +127,7 @@ jobs:
           git -C "$RUNNER_TEMP/madeira-ios" apply "$GITHUB_WORKSPACE/mobile/patches/"*.patch
           xcrun --sdk iphoneos swiftc -frontend -parse -swift-version 5 \
             -target arm64-apple-ios18.0 -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
-            "$RUNNER_TEMP/madeira-ios/app/Madeira/"{ContentView,Library,MadeiraApp,SteamRuntime,VCRedist,JITNetwork,LogStore,RuntimeDependencyPolicy,PortableWindowsImportReader,PortableLegacyGameAudit,SteamDirectoryAudit,MobileSupportCatalog,GameRecommendations}.swift
+            "$RUNNER_TEMP/madeira-ios/app/Madeira/"{ContentView,Library,MadeiraApp,SteamRuntime,VCRedist,JITNetwork,LogStore,RuntimeDependencyPolicy,PortableWindowsImportReader,PortableLegacyGameAudit,SteamDirectoryAudit,MobileSupportCatalog,GameRecommendations,MadeiraDock}.swift
           xcrun plutil -lint "$RUNNER_TEMP/madeira-ios/app/Madeira/Info.plist" "$RUNNER_TEMP/madeira-ios/app/Madeira.xcodeproj/project.pbxproj"
       - name: Verify pinned Chinese fonts and missing NLS tables
         run: |
