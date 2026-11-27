@@ -208,6 +208,40 @@ jobs:
             exit 1
           fi
           test ! -e "$RUNNER_TEMP/invalid-publication"
+      - name: Exercise public trust activation in migrated iPhone project
+        run: |
+          set -euo pipefail
+          bash -n scripts/configure-iphone-support-trust.sh
+          export HOME="$RUNNER_TEMP/support-test-home"
+          public="$HOME/.gamebridge-support/release-1"
+          project="$RUNNER_TEMP/madeira-old"
+          cp "$project/app/Madeira/Info.plist" "$RUNNER_TEMP/before-trust.plist"
+          cp "$project/app/Madeira.xcodeproj/project.pbxproj" "$RUNNER_TEMP/before-trust.pbxproj"
+          cp "$project/app/Madeira/Madeira.entitlements" "$RUNNER_TEMP/before-trust.entitlements"
+          bash scripts/configure-iphone-support-trust.sh --check "$project" "$public"
+          cmp "$RUNNER_TEMP/before-trust.plist" "$project/app/Madeira/Info.plist"
+          bash scripts/configure-iphone-support-trust.sh --apply "$project" "$public"
+          bash scripts/configure-iphone-support-trust.sh --apply "$project" "$public"
+          cmp "$RUNNER_TEMP/before-trust.pbxproj" "$project/app/Madeira.xcodeproj/project.pbxproj"
+          cmp "$RUNNER_TEMP/before-trust.entitlements" "$project/app/Madeira/Madeira.entitlements"
+          python3 - "$project/app/Madeira/Info.plist" "$public/trust.json" "$RUNNER_TEMP/before-trust.plist" <<'PY'
+          import json, pathlib, plistlib, sys
+          current, trust, original = map(pathlib.Path, sys.argv[1:])
+          actual = plistlib.loads(current.read_bytes())
+          key = json.loads(trust.read_bytes())
+          expected = plistlib.loads(original.read_bytes())
+          expected.update(GameBridgeSupportKeyID=key["keyID"], GameBridgeSupportPublicKey=key["publicKey"])
+          assert actual == expected
+          PY
+          mkdir "$RUNNER_TEMP/bad-public"
+          cp "$public/steam-seed.json" "$RUNNER_TEMP/bad-public/"
+          printf '{}' > "$RUNNER_TEMP/bad-public/trust.json"
+          cp "$project/app/Madeira/Info.plist" "$RUNNER_TEMP/activated.plist"
+          if bash scripts/configure-iphone-support-trust.sh --apply "$project" "$RUNNER_TEMP/bad-public"; then
+            echo "Invalid trust unexpectedly embedded" >&2
+            exit 1
+          fi
+          cmp "$RUNNER_TEMP/activated.plist" "$project/app/Madeira/Info.plist"
       - name: Resolve app dependencies
         run: |
           xcodebuild -resolvePackageDependencies -project Whisky.xcodeproj \
