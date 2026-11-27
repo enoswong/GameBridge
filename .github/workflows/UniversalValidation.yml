@@ -39,6 +39,8 @@ jobs:
           if-no-files-found: error
       - name: Test offline iPhone performance audit
         run: python3 scripts/test-mobile-session-audit.py
+      - name: Test shown-frame and thermal audit
+        run: python3 scripts/test-mobile-frame-audit.py
       - name: Test official archive transfer retry policy
         run: python3 scripts/test-mobile-steam-download.py
       - name: Test missing-only exported Steam recovery
