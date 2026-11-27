@@ -60,6 +60,8 @@ jobs:
             git -C "$RUNNER_TEMP/source-$component" -c protocol.version=2 fetch --depth=1 --filter=blob:none --no-recurse-submodules "$url" "$revision"
             git -C "$RUNNER_TEMP/source-$component" cat-file -e "$revision^{commit}"
           done
+      - name: Inventory pinned Steam packages for desktop module diagnosis
+        run: python3 scripts/diagnose-mobile-steam.py --official-packages
       - name: Verify official Steam bootstrap archive
         run: |
           set -euo pipefail
