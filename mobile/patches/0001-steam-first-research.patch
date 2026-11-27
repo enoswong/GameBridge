@@ -438,12 +438,12 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +            if let start = presentStart {
 +                let elapsed = now - start
 +                if elapsed > 10 || frames < presentBase || mode != presentMode {
-+                    logStore.log("[gamebridge-present-gap] duration_ms=\(Int(max(0, elapsed) * 1000))")
++                    self.logStore.log("[gamebridge-present-gap] duration_ms=\(Int(max(0, elapsed) * 1000))")
 +                    presentStart = nil
 +                } else {
 +                    presentThermal = max(presentThermal, thermal)
 +                    if elapsed >= 5 {
-+                        logStore.log("[gamebridge-present] frames=\(frames - presentBase) duration_ms=\(Int(elapsed * 1000)) mode=\(mode) thermal=\(presentThermal)")
++                        self.logStore.log("[gamebridge-present] frames=\(frames - presentBase) duration_ms=\(Int(elapsed * 1000)) mode=\(mode) thermal=\(presentThermal)")
 +                        presentStart = nil
 +                    }
 +                }
