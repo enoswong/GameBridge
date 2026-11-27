@@ -17,7 +17,7 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
              .navigationBarTitleDisplayMode(.inline)
              .toolbarBackground(.regularMaterial, for: .navigationBar)
              // The library keeps a material bar only before iOS 26. From iOS 26 the
-@@ -1399,12 +1398,190 @@
+@@ -1399,12 +1398,211 @@
              }
              // A Home Screen shortcut (madeira://play?exe=...) starts its library entry,
              // now or, from a cold start, once the library is up.
@@ -82,6 +82,11 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +                        .frame(maxWidth: .infinity, alignment: .leading)
 +                    ShareLink(item: gameBridgeDiagnostics) {
 +                        Label("Share diagnostic summary", systemImage: "square.and.arrow.up")
++                    }
++                    if let report = gameBridgeSupportIssueURL {
++                        Link("Report component problem on GitHub", destination: report)
++                        Text("Review before submitting. GitHub issues may be public; only module states and failure codes are included.")
++                            .font(.caption).foregroundStyle(.secondary)
 +                    }
 +                }
 +            }
@@ -157,8 +162,24 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +            "Wine session: \(guest)",
 +            "Last requested stage: \(gameBridgeStage)",
 +            "Last component report: \(gameBridgeLastSteamHealth)",
++            "Recent loader signals: \(MobileSupportSignals.shared.recent().joined(separator: ", "))",
 +            "Steam login and gameplay acceptance: unverified"
 +        ].joined(separator: "\n")
++    }
++
++    private var gameBridgeSupportIssueURL: URL? {
++        guard !gameBridgeLastSteamHealth.isEmpty || !MobileSupportSignals.shared.recent().isEmpty else { return nil }
++        var parts = URLComponents(string: "https://github.com/enoswong/GameBridge/issues/new")
++        let signals = MobileSupportSignals.shared.recent().joined(separator: ", ")
++        let body = "GameBridge iOS research component report\n"
++            + "iOS: \(UIDevice.current.systemVersion)\n"
++            + "Component states: \(gameBridgeLastSteamHealth)\n"
++            + "Recent loader signals: \(signals)\n"
++        parts?.queryItems = [
++            URLQueryItem(name: "title", value: "[iOS] Steam component failure"),
++            URLQueryItem(name: "body", value: body)
++        ]
++        return parts?.url
 +    }
 +
 +    /// Record only a bounded list of known component names and their PE state.
