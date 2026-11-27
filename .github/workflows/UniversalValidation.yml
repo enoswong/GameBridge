@@ -215,6 +215,22 @@ jobs:
           export HOME="$RUNNER_TEMP/support-test-home"
           public="$HOME/.gamebridge-support/release-1"
           project="$RUNNER_TEMP/madeira-old"
+          # Check the real embedded public anchor before testing configurable fixture keys.
+          python3 - "$project/app/Madeira/Info.plist" mobile/support/trust.json <<'PY'
+          import json, pathlib, plistlib, sys
+          plist, trust = map(pathlib.Path, sys.argv[1:])
+          expected = json.loads(trust.read_bytes())
+          data = plist.read_bytes()
+          parsed = plistlib.loads(data)
+          assert parsed["GameBridgeSupportKeyID"] == expected["keyID"]
+          assert parsed["GameBridgeSupportPublicKey"] == expected["publicKey"]
+          for name, placeholder in (("keyID", "$(GAMEBRIDGE_SUPPORT_KEY_ID)"),
+                                    ("publicKey", "$(GAMEBRIDGE_SUPPORT_PUBLIC_KEY)")):
+              old = ("<string>" + expected[name] + "</string>").encode()
+              assert data.count(old) == 1
+              data = data.replace(old, ("<string>" + placeholder + "</string>").encode())
+          plist.write_bytes(data)
+          PY
           cp "$project/app/Madeira/Info.plist" "$RUNNER_TEMP/before-trust.plist"
           cp "$project/app/Madeira.xcodeproj/project.pbxproj" "$RUNNER_TEMP/before-trust.pbxproj"
           cp "$project/app/Madeira/Madeira.entitlements" "$RUNNER_TEMP/before-trust.entitlements"
