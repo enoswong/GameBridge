@@ -9,7 +9,7 @@ typedef long (__stdcall *CreateDevice)(void *, int, void *, unsigned int,
 void mainCRTStartup(void) {
     void *device = 0, *context = 0;
     int feature = 0;
-    MessageBoxW(0, (const W *)L"Win32 x64 execution and window creation reached. Press OK to test D3D11.",
+    MessageBoxW(0, (const W *)L"Win32 x64 execution reached.\n\n繁體中文測試\n简体中文测试\n\nPress OK to test D3D11.",
                 (const W *)L"GameBridge native smoke test", 0);
     void *module = LoadLibraryW((const W *)L"d3d11.dll");
     CreateDevice create = module ? (CreateDevice)GetProcAddress(module, "D3D11CreateDevice") : 0;
