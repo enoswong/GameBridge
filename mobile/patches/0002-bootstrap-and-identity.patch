@@ -1,7 +1,7 @@
 diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
 --- a/app/Madeira/SteamRuntime.swift
 +++ b/app/Madeira/SteamRuntime.swift
-@@ -325,6 +325,117 @@
+@@ -325,6 +325,184 @@
          await progress("Steam components are ready.")
      }
  
@@ -18,7 +18,7 @@ diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
 +        let prefix = prefix.resolvingSymlinksInPath().standardizedFileURL
 +        let drive = prefix.appendingPathComponent("drive_c")
 +        let relative = "Program Files/Steam Big Picture"
-+        let root = try SteamRuntimeFiles.destination(relative, under: drive)
++        _ = try SteamRuntimeFiles.destination(relative, under: drive)
 +        let target = try SteamRuntimeFiles.destination(relative + "/steam.exe", under: drive)
 +        func validPE(_ file: URL) -> Bool {
 +            guard let values = try? file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
@@ -37,14 +37,19 @@ diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
 +            } catch { return false }
 +        }
 +        let hasClient = validPE(target)
-+        let hasGUI = ["bin/vgui2_s.dll", "win64/vgui2_s.dll"].contains {
-+            validPE(root.appendingPathComponent($0))
++        func hasModule(_ name: String) -> Bool {
++            guard let url = try? SteamRuntimeFiles.destination(relative + "/" + name, under: drive) else { return false }
++            return validPE(url)
 +        }
-+        let hasClientLibrary = ["steamclient.dll", "steamclient64.dll"].contains {
-+            validPE(root.appendingPathComponent($0))
-+        }
++        let hasGUI = hasModule("bin/vgui2_s.dll") || hasModule("win64/vgui2_s.dll")
++        let hasClientLibrary = hasModule("steamclient.dll") || hasModule("steamclient64.dll")
 +        if hasClient && hasGUI && hasClientLibrary { return }
 +        // Keep an existing updated or foreign install intact. No mixed-version overwrite.
++        let catalog = try await desktopSupportCatalog()
++        let packages = catalog?.packages ?? SteamRuntimeFiles.packages.map {
++            MobileSupportCatalog.Package(file: $0.file, bytes: $0.bytes, sha256: $0.sha256)
++        }
++        let clientHash = catalog?.clientSHA256 ?? SteamRuntimeFiles.clientSHA256
 +        let stage = fm.temporaryDirectory.appendingPathComponent("gamebridge-steam-" + UUID().uuidString)
 +        try fm.createDirectory(at: stage, withIntermediateDirectories: false)
 +        defer { try? fm.removeItem(at: stage) }
@@ -56,7 +61,7 @@ diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
 +        let session = URLSession(configuration: configuration, delegate: SteamRuntimeRedirects(), delegateQueue: nil)
 +        defer { session.invalidateAndCancel() }
 +        var names = Set<String>(), files: [String] = []
-+        for package in SteamRuntimeFiles.packages {
++        for package in packages {
 +            try Task.checkCancellation()
 +            guard let url = URL(string: SteamRuntimeFiles.origin + package.file) else {
 +                throw SteamRuntimeFiles.Failure.invalidPackage
@@ -80,7 +85,7 @@ diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
 +        }
 +        guard validPE(stage.appendingPathComponent("steam.exe")),
 +              validPE(stage.appendingPathComponent("bin/vgui2_s.dll")),
-+              Self.hash(try Data(contentsOf: stage.appendingPathComponent("steamclient64.dll"))) == SteamRuntimeFiles.clientSHA256 else {
++              Self.hash(try Data(contentsOf: stage.appendingPathComponent("steamclient64.dll"))) == clientHash else {
 +            throw SteamRuntimeFiles.Failure.invalidPackage
 +        }
 +        try Task.checkCancellation()
@@ -114,6 +119,68 @@ diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
 +            defer { try? fm.removeItem(at: temp) }
 +            try fm.copyItem(at: source, to: temp)
 +            try fm.moveItem(at: temp, to: destination)
++        }
++    }
++
++    /// The configured trust anchor is part of the native app signature. There is no
++    /// production signing key in source control; unconfigured builds use bundled pins.
++    private func desktopSupportCatalog() async throws -> MobileSupportCatalog.Payload? {
++        let info = Bundle.main
++        let keyID = info.object(forInfoDictionaryKey: "GameBridgeSupportKeyID") as? String ?? ""
++        let encodedKey = info.object(forInfoDictionaryKey: "GameBridgeSupportPublicKey") as? String ?? ""
++        if keyID.isEmpty && encodedKey.isEmpty { return nil }
++        guard !keyID.isEmpty, keyID.utf8.count <= 64,
++              let publicKey = Data(base64Encoded: encodedKey), publicKey.count == 32 else {
++            throw SteamRuntimeFiles.Failure.invalidPackage
++        }
++        // This is only a data endpoint; archive downloads still go directly to Valve.
++        let url = URL(string: "https://raw.githubusercontent.com/enoswong/GameBridge/refs/heads/support-catalog/mobile/steam-seed.json")!
++        let store = UserDefaults.standard
++        let cacheKey = "GameBridge.acceptedSteamCatalog." + keyID
++        let cached = store.data(forKey: cacheKey)
++        struct Cached: Codable {
++            let envelope: Data
++            let revision: Int
++            let digest: String
++        }
++        let previous = try cached.map { try JSONDecoder().decode(Cached.self, from: $0) }
++        let now = Int(Date().timeIntervalSince1970)
++        func verify(_ data: Data) throws -> MobileSupportCatalog.Verified {
++            try MobileSupportCatalog.verify(data, keyID: keyID, publicKey: publicKey, now: now,
++                minimumRevision: previous?.revision ?? 0, acceptedDigest: previous?.digest)
++        }
++        let config = URLSessionConfiguration.ephemeral
++        config.httpCookieStorage = nil
++        config.urlCredentialStorage = nil
++        config.timeoutIntervalForRequest = 15
++        config.timeoutIntervalForResource = 30
++        let session = URLSession(configuration: config, delegate: SteamRuntimeRedirects(), delegateQueue: nil)
++        defer { session.invalidateAndCancel() }
++        do {
++            var request = URLRequest(url: url)
++            request.cachePolicy = .reloadIgnoringLocalCacheData
++            let (stream, response) = try await session.bytes(for: request)
++            guard let http = response as? HTTPURLResponse, http.statusCode == 200, http.url == url,
++                  http.expectedContentLength <= Int64(MobileSupportCatalog.maxEnvelopeBytes) else {
++                throw SteamRuntimeFiles.Failure.invalidPackage
++            }
++            var data = Data()
++            for try await byte in stream {
++                try Task.checkCancellation()
++                guard data.count < MobileSupportCatalog.maxEnvelopeBytes else {
++                    throw SteamRuntimeFiles.Failure.invalidPackage
++                }
++                data.append(byte)
++            }
++            let verified = try verify(data)
++            let accepted = Cached(envelope: data, revision: verified.payload.revision, digest: verified.digest)
++            store.set(try JSONEncoder().encode(accepted), forKey: cacheKey)
++            return verified.payload
++        } catch {
++            try Task.checkCancellation()
++            if let previous { return try verify(previous.envelope).payload }
++            // No previously accepted revision: the shipped pins remain the fallback.
++            return nil
 +        }
 +    }
 +
