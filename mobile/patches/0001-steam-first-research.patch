@@ -17,7 +17,7 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
              .navigationBarTitleDisplayMode(.inline)
              .toolbarBackground(.regularMaterial, for: .navigationBar)
              // The library keeps a material bar only before iOS 26. From iOS 26 the
-@@ -1399,12 +1398,246 @@
+@@ -1399,12 +1398,271 @@
              }
              // A Home Screen shortcut (madeira://play?exe=...) starts its library entry,
              // now or, from a cold start, once the library is up.
@@ -110,6 +110,30 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +        }
 +    }
 +
++    // Install only verified build-time resources; preserve user-installed fonts.
++    private func gameBridgePrepareChineseFonts(prefix: URL) {
++        let fm = FileManager.default
++        guard let resources = Bundle.main.resourceURL?.appendingPathComponent("fonts-ja") else { return }
++        let fonts = prefix.appendingPathComponent("drive_c/windows/Fonts")
++        let names = ["NotoSansCJKsc-Regular.otf", "NotoSansCJKhk-Regular.otf"]
++        do {
++            try fm.createDirectory(at: fonts, withIntermediateDirectories: true)
++            for name in names {
++                let source = resources.appendingPathComponent(name)
++                let target = fonts.appendingPathComponent(name)
++                if fm.fileExists(atPath: target.path) { continue }
++                guard fm.fileExists(atPath: source.path) else {
++                    LogStore.shared.log("[gamebridge-fonts] bundled resource missing: \(name)")
++                    continue
++                }
++                try fm.copyItem(at: source, to: target)
++                LogStore.shared.log("[gamebridge-fonts] installed \(name)")
++            }
++        } catch {
++            LogStore.shared.log("[gamebridge-fonts] installation incomplete: \(error.localizedDescription)")
++        }
++    }
++
 +    private func gameBridgeCheckSupport() {
 +        guard !gameBridgePreparing, library.current == nil, library.startingJIT == nil,
 +              !library.launching, wine_process_is_running() == 0, wineserver_is_running() == 0 else { return }
@@ -149,6 +173,7 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +                gameBridgeStage = "Checking and preparing official Steam components…"
 +                gameBridgeRecordSteamHealth(phase: "before-preparation")
 +                try await SteamRuntimeInstaller.shared.prepareDesktopBootstrap(prefix: prefix)
++                gameBridgePrepareChineseFonts(prefix: prefix)
 +                gameBridgeRecordSteamHealth(phase: "after-preparation")
 +                guard LibraryEntry.steamClientInstalled else { throw SteamRuntimeFiles.Failure.invalidPackage }
 +                gameBridgeStage = "Checking game dependencies…"
