@@ -54,6 +54,25 @@ class SessionAuditTests(unittest.TestCase):
         self.assertNotIn('PrivatePerson', str(r))
         self.assertNotIn('do-not-export', str(r))
 
+    def test_present_config_detected_without_leaking_values(self):
+        r = audit.analyze(['[INFO] madeira.cfg: env.TEST=private-value',
+                           '[phase] wine-start t+ 0.848s rev=ml526'])
+        self.assertTrue(r['config_present'])
+        self.assertNotIn('private-value', str(r))
+
+    def test_two_wine_starts_are_not_one_comparable_session(self):
+        r = audit.analyze(['[INFO] madeira.cfg: (empty)',
+                           '[phase] wine-start t+ 0.848s rev=ml526',
+                           '[INFO] madeira.cfg: (empty)',
+                           '[phase] wine-start t+ 1.822s rev=ml526'])
+        self.assertEqual(r['assessment'], 'multiple_session_markers')
+
+    def test_config_and_wine_start_are_not_double_counted(self):
+        r = audit.analyze(['[INFO] madeira.cfg absent: legacy madeira-*.txt files apply',
+                           '[phase] wine-start t+ 0.848s rev=ml526',
+                           '[phase] spawn:L"steam.exe" t+ 1.923s rev=ml526'])
+        self.assertEqual(r['assessment'], 'steam_spawn_only')
+
     def test_mixed_sessions_rejected_for_comparison(self):
         r = audit.analyze(['madeira.cfg absent: legacy madeira-*.txt files apply',
                            'madeira.cfg absent: legacy madeira-*.txt files apply'], None)
