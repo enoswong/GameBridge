@@ -5,6 +5,8 @@ Read-only: no guest files are modified, and no account/log content is printed.
 """
 import argparse
 import hashlib
+import json
+import re
 import pathlib
 import struct
 import subprocess
@@ -36,12 +38,33 @@ def facts(data):
         machine, hex(machine))
 
 
-def inventory():
+def catalog_packages(payload):
+    prefixes = ("steam_win32.zip.", "bins_win32.zip.", "bins_win64_win32.zip.")
+    packages = payload["packages"]
+    if len(packages) != 3:
+        raise ValueError("Expected three supported packages")
+    result = []
+    for prefix in prefixes:
+        matches = [p for p in packages if re.fullmatch(re.escape(prefix) + r"[0-9a-f]{40}", p["file"])]
+        if len(matches) != 1:
+            raise ValueError("Invalid package name or duplicate")
+        package = matches[0]
+        if type(package["bytes"]) is not int or not 1 <= package["bytes"] <= 64 * 1024 * 1024:
+            raise ValueError("Invalid archive size")
+        if not re.fullmatch(r"[0-9a-f]{64}", package["sha256"]):
+            raise ValueError("Invalid archive hash")
+        result.append((package["file"], package["bytes"], package["sha256"]))
+    if not re.fullmatch(r"[0-9a-f]{64}", payload["clientSHA256"]):
+        raise ValueError("Invalid client identity")
+    return result
+
+
+def inventory(packages=PACKAGES, client_identity="71b391fe9f3e2006cbc81a5c75eef3eb4186012deabfdb2c8b7e8d4850ecf640"):
     seen = set()
     all_files = set()
     client_hash = None
     with tempfile.TemporaryDirectory(prefix="gamebridge-steam-inventory-") as folder:
-        for name, size, sha in PACKAGES:
+        for name, size, sha in packages:
             file = pathlib.Path(folder) / name
             subprocess.run(["curl", "--proto", "=https", "--fail", "--silent", "--show-error",
                             "--retry", "2", "--connect-timeout", "20", "--max-time", "120",
@@ -60,6 +83,8 @@ def inventory():
                     parts = relative.split("/")
                     if not relative or any(not part or part in {".", ".."} or ":" in part for part in parts):
                         raise ValueError("Unsafe official ZIP path")
+                    if (entry.external_attr >> 16) & 0xf000 not in (0, 0x8000):
+                        raise ValueError("Unsupported archive file type")
                     if relative in all_files:
                         raise ValueError("Conflicting file in official archive cohort: " + relative)
                     all_files.add(relative)
@@ -74,7 +99,7 @@ def inventory():
                         client_hash = hashlib.sha256(data).hexdigest()
     if not {"steam.exe", "bin/vgui2_s.dll", "steamclient64.dll"}.issubset(seen):
         raise ValueError("Pinned desktop cohort is incomplete")
-    if client_hash != "71b391fe9f3e2006cbc81a5c75eef3eb4186012deabfdb2c8b7e8d4850ecf640":
+    if client_hash != client_identity:
         raise ValueError("Pinned Steam client64 identity mismatch")
     print("Pinned packages contain bin/vgui2_s.dll:", "bin/vgui2_s.dll" in seen)
     print("Non-conflicting verified file cohort:", len(all_files))
@@ -109,13 +134,19 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--official-packages", action="store_true")
     parser.add_argument("--client-dir", type=pathlib.Path)
+    parser.add_argument("--catalog-payload", type=pathlib.Path, help="Verify every archive in a reviewed unsigned payload")
     args = parser.parse_args()
-    if not args.official_packages and args.client_dir is None:
+    if not args.official_packages and args.client_dir is None and args.catalog_payload is None:
         parser.error("choose --official-packages and/or --client-dir")
     if args.client_dir is not None:
         inspect_client(args.client_dir)
     if args.official_packages:
         inventory()
+    if args.catalog_payload is not None:
+        if args.catalog_payload.stat().st_size > 40 * 1024:
+            raise ValueError("Payload too large")
+        payload = json.loads(args.catalog_payload.read_bytes())
+        inventory(catalog_packages(payload), payload["clientSHA256"])
 
 
 if __name__ == "__main__":
