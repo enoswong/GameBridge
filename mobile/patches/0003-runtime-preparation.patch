@@ -496,7 +496,7 @@ diff --git a/app/Madeira/MobileSupportCatalog.swift b/app/Madeira/MobileSupportC
 new file mode 100644
 --- /dev/null
 +++ b/app/Madeira/MobileSupportCatalog.swift
-@@ -0,0 +1,150 @@
+@@ -0,0 +1,149 @@
 +// SPDX-License-Identifier: GPL-3.0-or-later
 +import Foundation
 +#if canImport(CryptoKit)
@@ -590,7 +590,6 @@ new file mode 100644
 +    }
 +}
 +#endif
-+
 +
 +/// A small local failure history, collected even when the Wine log view is hidden.
 +/// Only parsed DLL basenames and failure categories survive; raw text is never uploaded.
