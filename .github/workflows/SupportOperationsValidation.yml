@@ -1,0 +1,42 @@
+name: Validate support operations workflow source
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/SupportCatalogMonitor.yml'
+      - '.github/workflows/SupportIssueTriage.yml'
+      - '.github/workflows/SupportOperationsValidation.yml'
+permissions:
+  contents: read
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Parse workflow YAML and validate embedded Bash and JavaScript
+        run: |
+          ruby -ryaml -ropen3 -e '
+            paths = %w[SupportCatalogMonitor SupportIssueTriage]
+            paths.each do |name|
+              doc = YAML.safe_load(File.read(".github/workflows/#{name}.yml"))
+              doc.fetch("jobs").each_value do |job|
+                job.fetch("steps").each do |step|
+                  if step["run"]
+                    output, status = Open3.capture2e("bash", "-n", stdin_data: step["run"])
+                    abort output unless status.success?
+                  end
+                  script = step.dig("with", "script")
+                  if script
+                    code = "async function run() {\n#{script}\n}\n"
+                    output, status = Open3.capture2e("node", "--check", "-", stdin_data: code)
+                    abort output unless status.success?
+                  end
+                end
+              end
+              puts "#{name}: parsed and syntax checked"
+            end
+          '
+      # This is deliberately read-only. No live issues are created from PR events.
