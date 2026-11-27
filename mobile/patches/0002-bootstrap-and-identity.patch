@@ -232,9 +232,9 @@ diff --git a/app/Madeira/Info.plist b/app/Madeira/Info.plist
 +	<key>CFBundleDisplayName</key>
 +	<string>GameBridge Research</string>
 +	<key>GameBridgeSupportKeyID</key>
-+	<string>$(GAMEBRIDGE_SUPPORT_KEY_ID)</string>
++	<string>98c7f873c4973474</string>
 +	<key>GameBridgeSupportPublicKey</key>
-+	<string>$(GAMEBRIDGE_SUPPORT_PUBLIC_KEY)</string>
++	<string>A9s82dRDX1u3Z/+RZebiEGr+alk8Aqg20VPV/SVSDTk=</string>
  	<key>CFBundleDocumentTypes</key>
  	<array>
  		<dict>
