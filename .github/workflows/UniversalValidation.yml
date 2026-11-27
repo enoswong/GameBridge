@@ -128,6 +128,13 @@ jobs:
             -target arm64-apple-ios18.0 -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
             "$RUNNER_TEMP/madeira-ios/app/Madeira/"{ContentView,Library,MadeiraApp,SteamRuntime,VCRedist,JITNetwork,LogStore,RuntimeDependencyPolicy,PortableWindowsImportReader,PortableLegacyGameAudit,SteamDirectoryAudit,MobileSupportCatalog,GameRecommendations}.swift
           xcrun plutil -lint "$RUNNER_TEMP/madeira-ios/app/Madeira/Info.plist" "$RUNNER_TEMP/madeira-ios/app/Madeira.xcodeproj/project.pbxproj"
+      - name: Verify pinned Chinese fonts and missing NLS tables
+        run: |
+          bash scripts/prepare-mobile-cjk-fonts.sh "$RUNNER_TEMP/madeira-ios"
+          bash scripts/prepare-mobile-cjk-fonts.sh "$RUNNER_TEMP/madeira-ios"
+          test -s "$RUNNER_TEMP/madeira-ios/app/Madeira/fonts-ja/LICENSE-NotoSansCJK-OFL.txt"
+          test -s "$RUNNER_TEMP/madeira-ios/app/Madeira/nls/c_850.nls"
+          test -s "$RUNNER_TEMP/madeira-ios/app/Madeira/nls/c_10000.nls"
       - name: Test in-place source upgrade from original device build
         run: |
           set -euo pipefail
