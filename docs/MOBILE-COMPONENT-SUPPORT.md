@@ -49,6 +49,16 @@ For each subsequent release, use the reviewed payload with a higher revision and
 
 Publish both public JSON files together to the support-catalog branch, preferably through a PR with the validation check passing. A 30-day renewal requires the maintainer's offline signature even when package pins remain unchanged. Do not rotate trust on this branch alone. The workflow detects invalid/deleted metadata, unchanged-revision content changes and trust replacement relative to the previous commit. This does not automate discovering newer official packages or certify their runtime compatibility.
 
+## Renewal and health monitoring
+
+To renew the same reviewed package cohort, copy the latest published mobile/steam-seed.json locally, then run:
+
+    bash scripts/renew-mobile-support-channel.sh /path/to/current/steam-seed.json "$HOME/.gamebridge-support/next-public-release"
+
+The local signer authenticates the previous envelope against the existing maintainer key, even if the old envelope has expired, and prepares a higher revision with a new 30-day validity period. The ordinary release tool re-downloads and verifies all pinned packages before signing. Historical verification is confined to the local renewal tool; the iPhone still rejects expired catalogs. Review the current branch revision before publishing both public JSON files together. No production signing key leaves the Mac.
+
+The proposed SupportCatalogMonitor workflow runs daily at 02:20 UTC (10:20 Hong Kong/Singapore time) after it is merged to the default branch, or through workflow_dispatch when available. It checks the published metadata signature against the branch's public trust file, expiry and official package bytes. It creates or updates one fixed-title GitHub issue for failures or expiry within seven days and closes it on verified recovery. This is an operational health check, not independent proof that the branch trust file matches a particular installed app's embedded key. No private key, binary upload or automatic catalog publishing is involved. The workflow is not active on the default branch yet and has not exercised real issue creation.
+
 ## iPhone update and repair controls
 
 The research home now has separate **Check GitHub support updates** and **Prepare / repair Steam** buttons. The former forces a signed metadata refresh and displays the verified revision (network or valid cache); it never changes guest files. The latter runs the normal preparation path without launching Wine or requesting JIT. An intact supported client checks for updates before launch using a 24-hour successful-verification cache; a missing or interrupted installation forces a new check. An unavailable catalog cannot stop an otherwise intact client from attempting its normal launch. Repair still refuses mixed-version replacement.
