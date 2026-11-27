@@ -1,0 +1,299 @@
+name: Universal validation
+on:
+  pull_request:
+    branches:
+      - codex/gamebridge-guided-steam
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: universal-validation-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  mobile-source-patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test IPA structure verifier
+        run: python3 scripts/test-mobile-ipa-verifier.py
+      - name: Test iPhone development signing policy
+        run: python3 scripts/test-iphone-development-signing.py
+      - name: Test official archive transfer retry policy
+        run: python3 scripts/test-mobile-steam-download.py
+      - name: Test missing-only exported Steam recovery
+        run: python3 scripts/test-iphone-steam-repair.py
+      - name: Check research script syntax
+        run: |
+          bash -n scripts/prepare-mobile-engine.sh
+          bash -n scripts/prepare-mobile-cjk-fonts.sh
+          bash -n scripts/upgrade-iphone-steam-support.sh
+      - name: Verify fixed Microsoft runtime download before native build
+        run: |
+          bash -n scripts/fetch-mobile-vcruntime.sh
+          bash scripts/fetch-mobile-vcruntime.sh --fetch "$RUNNER_TEMP/vc_redist.x64.exe"
+          bash scripts/fetch-mobile-vcruntime.sh --verify "$RUNNER_TEMP/vc_redist.x64.exe"
+          printf MZ > "$RUNNER_TEMP/invalid-runtime.exe"
+          if bash scripts/fetch-mobile-vcruntime.sh --verify "$RUNNER_TEMP/invalid-runtime.exe"; then
+            echo "Invalid runtime unexpectedly accepted" >&2
+            exit 1
+          fi
+          ln -s "$RUNNER_TEMP/vc_redist.x64.exe" "$RUNNER_TEMP/linked-runtime.exe"
+          if bash scripts/fetch-mobile-vcruntime.sh --verify "$RUNNER_TEMP/linked-runtime.exe"; then
+            echo "Linked runtime unexpectedly accepted" >&2
+            exit 1
+          fi
+      - name: Verify desktop Steam patch against pinned upstream
+        run: |
+          git init "$RUNNER_TEMP/madeira"
+          git -C "$RUNNER_TEMP/madeira" remote add origin https://github.com/willfaust/Madeira.git
+          git -C "$RUNNER_TEMP/madeira" fetch --depth=1 origin fbad430410b4075192166172447c859714726de9
+          git -C "$RUNNER_TEMP/madeira" checkout --detach FETCH_HEAD
+          git -C "$RUNNER_TEMP/madeira" apply --check "$GITHUB_WORKSPACE/mobile/patches/"*.patch
+          git -C "$RUNNER_TEMP/madeira" apply "$GITHUB_WORKSPACE/mobile/patches/"*.patch
+          git -C "$RUNNER_TEMP/madeira" diff --stat
+          for name in RuntimeDependencyPolicy PortableWindowsImportReader PortableLegacyGameAudit SteamDirectoryAudit MobileSupportCatalog; do
+            cmp "$GITHUB_WORKSPACE/WhiskyKit/Sources/GameBridgeCore/$name.swift" "$RUNNER_TEMP/madeira/app/Madeira/$name.swift"
+          done
+      - name: Check pinned engine source revisions
+        run: |
+          set -euo pipefail
+          for component in FEX wine dxmt madeira-dock; do
+            revision="$(git -C "$RUNNER_TEMP/madeira" ls-tree HEAD "$component" | awk '{print $3}')"
+            test "${#revision}" -eq 40
+            url="$(git -C "$RUNNER_TEMP/madeira" config -f .gitmodules --get "submodule.$component.url")"
+            case "$url" in https://github.com/*) ;; *) exit 1 ;; esac
+            git init -q "$RUNNER_TEMP/source-$component"
+            git -C "$RUNNER_TEMP/source-$component" -c protocol.version=2 fetch --depth=1 --filter=blob:none --no-recurse-submodules "$url" "$revision"
+            git -C "$RUNNER_TEMP/source-$component" cat-file -e "$revision^{commit}"
+          done
+      - name: Inventory pinned Steam packages for desktop module diagnosis
+        run: python3 scripts/diagnose-mobile-steam.py --official-packages
+      - name: Verify official Steam bootstrap archive
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 120 --max-filesize 2307664 \
+            'https://client-update.akamai.steamstatic.com/steam_win32.zip.3e96965d109fc2d4cc14206b2fc4ec960a746ed3' \
+            -o "$RUNNER_TEMP/steam-bootstrap.zip"
+          test "$(wc -c < "$RUNNER_TEMP/steam-bootstrap.zip")" -eq 2307664
+          echo "1369615c795b60de822876b4dc4042186cf58d0dc8f63ea1371167f667e16925  $RUNNER_TEMP/steam-bootstrap.zip" | sha256sum -c -
+          python3 - "$RUNNER_TEMP/steam-bootstrap.zip" <<'PY'
+          import sys, zipfile
+          with zipfile.ZipFile(sys.argv[1]) as archive:
+              files = [i for i in archive.infolist() if i.filename == 'steam.exe']
+              assert len(files) == 1 and 64 <= files[0].file_size <= 64 * 1024 * 1024
+              with archive.open(files[0]) as executable:
+                  assert executable.read(2) == b'MZ'
+          print('Pinned bootstrap archive contains the expected Windows executable')
+          PY
+      - name: Exercise verified official missing-only recovery on bootstrap snapshot
+        run: |
+          mkdir "$RUNNER_TEMP/steam-snapshot"
+          python3 - "$RUNNER_TEMP/steam-bootstrap.zip" "$RUNNER_TEMP/steam-snapshot/steam.exe" <<'PY'
+          import pathlib, sys, zipfile
+          with zipfile.ZipFile(sys.argv[1]) as archive:
+              pathlib.Path(sys.argv[2]).write_bytes(archive.read("steam.exe"))
+          PY
+          python3 scripts/prepare-iphone-steam-repair.py \
+            --client-dir "$RUNNER_TEMP/steam-snapshot" --output "$RUNNER_TEMP/steam-missing"
+          test -f "$RUNNER_TEMP/steam-missing/bin/vgui2_s.dll"
+          test ! -e "$RUNNER_TEMP/steam-missing/steam.exe"
+          test ! -e "$RUNNER_TEMP/steam-snapshot/bin"
+  apple-platforms:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test packages
+        run: swift test --package-path WhiskyKit
+      - name: Typecheck portable core for iOS simulator
+        run: |
+          xcrun --sdk iphonesimulator swiftc \
+            -target arm64-apple-ios17.0-simulator \
+            -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" \
+            -typecheck WhiskyKit/Sources/GameBridgeCore/*.swift
+      - name: Typecheck portable core for physical iPhone SDK
+        run: |
+          xcrun --sdk iphoneos swiftc \
+            -target arm64-apple-ios18.0 \
+            -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
+            -typecheck WhiskyKit/Sources/GameBridgeCore/*.swift
+      - name: Parse actual mobile overlay sources
+        run: |
+          git init "$RUNNER_TEMP/madeira-ios"
+          git -C "$RUNNER_TEMP/madeira-ios" remote add origin https://github.com/willfaust/Madeira.git
+          git -C "$RUNNER_TEMP/madeira-ios" fetch --depth=1 origin fbad430410b4075192166172447c859714726de9
+          git -C "$RUNNER_TEMP/madeira-ios" checkout --detach FETCH_HEAD
+          git -C "$RUNNER_TEMP/madeira-ios" apply "$GITHUB_WORKSPACE/mobile/patches/"*.patch
+          xcrun --sdk iphoneos swiftc -frontend -parse -swift-version 5 \
+            -target arm64-apple-ios18.0 -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
+            "$RUNNER_TEMP/madeira-ios/app/Madeira/"{ContentView,Library,MadeiraApp,SteamRuntime,VCRedist,JITNetwork,LogStore,RuntimeDependencyPolicy,PortableWindowsImportReader,PortableLegacyGameAudit,SteamDirectoryAudit,MobileSupportCatalog,GameRecommendations,MadeiraDock}.swift
+          xcrun plutil -lint "$RUNNER_TEMP/madeira-ios/app/Madeira/Info.plist" "$RUNNER_TEMP/madeira-ios/app/Madeira.xcodeproj/project.pbxproj"
+      - name: Verify pinned Chinese fonts and missing NLS tables
+        run: |
+          bash scripts/prepare-mobile-cjk-fonts.sh "$RUNNER_TEMP/madeira-ios"
+          bash scripts/prepare-mobile-cjk-fonts.sh "$RUNNER_TEMP/madeira-ios"
+          test -s "$RUNNER_TEMP/madeira-ios/app/Madeira/fonts-ja/LICENSE-NotoSansCJK-OFL.txt"
+          test -s "$RUNNER_TEMP/madeira-ios/app/Madeira/nls/c_850.nls"
+          test -s "$RUNNER_TEMP/madeira-ios/app/Madeira/nls/c_10000.nls"
+      - name: Test in-place source upgrade from original device build
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin 6787eca8cad63d916ffd9e989a99432da93c6064
+          git clone --shared "$RUNNER_TEMP/madeira-ios" "$RUNNER_TEMP/madeira-old"
+          git -C "$RUNNER_TEMP/madeira-old" remote set-url origin https://github.com/willfaust/Madeira.git
+          for patch in mobile/patches/*.patch; do
+            git show "6787eca8cad63d916ffd9e989a99432da93c6064:$patch" > "$RUNNER_TEMP/$(basename "$patch")"
+          done
+          git -C "$RUNNER_TEMP/madeira-old" apply "$RUNNER_TEMP/"000{1,2,3}-*.patch
+          python3 - "$RUNNER_TEMP/madeira-old/app/Madeira.xcodeproj/project.pbxproj" <<'PY'
+          import pathlib, sys
+          p = pathlib.Path(sys.argv[1])
+          p.write_text(p.read_text().replace("V8NU3FX3TL", "TESTTEAM01"))
+          PY
+          printf 'fixture engine cache' > "$RUNNER_TEMP/madeira-old/engine-sentinel"
+          bash scripts/update-existing-iphone-project.sh --check "$RUNNER_TEMP/madeira-old"
+          bash scripts/update-existing-iphone-project.sh --apply "$RUNNER_TEMP/madeira-old"
+          grep -q TESTTEAM01 "$RUNNER_TEMP/madeira-old/app/Madeira.xcodeproj/project.pbxproj"
+          grep -q 'fixture engine cache' "$RUNNER_TEMP/madeira-old/engine-sentinel"
+          cmp "$RUNNER_TEMP/madeira-ios/app/Madeira/SteamRuntime.swift" "$RUNNER_TEMP/madeira-old/app/Madeira/SteamRuntime.swift"
+          cmp "$RUNNER_TEMP/madeira-ios/app/Madeira/ContentView.swift" "$RUNNER_TEMP/madeira-old/app/Madeira/ContentView.swift"
+          cmp "$RUNNER_TEMP/madeira-ios/app/Madeira/MobileSupportCatalog.swift" "$RUNNER_TEMP/madeira-old/app/Madeira/MobileSupportCatalog.swift"
+      - name: Test incremental iPhone update from signed support-v1
+        run: |
+          set -euo pipefail
+          baseline=1bfd71316184ffddb23a763fdad9772e398dc988
+          git fetch --no-tags --depth=1 origin "$baseline"
+          git clone --shared "$RUNNER_TEMP/madeira-ios" "$RUNNER_TEMP/madeira-support-v1"
+          project="$RUNNER_TEMP/madeira-support-v1"
+          git -C "$project" remote set-url origin https://github.com/willfaust/Madeira.git
+          mkdir "$RUNNER_TEMP/support-v1-patches"
+          for patch in mobile/patches/*.patch; do
+            git show "$baseline:$patch" > "$RUNNER_TEMP/support-v1-patches/$(basename "$patch")"
+          done
+          git -C "$project" apply "$RUNNER_TEMP/support-v1-patches/"*.patch
+          printf 'fixture engine cache' > "$project/engine-sentinel"
+          cp "$project/app/Madeira.xcodeproj/project.pbxproj" "$RUNNER_TEMP/support-v1-project.pbxproj"
+          bash scripts/update-existing-iphone-project.sh --check "$project" support-v1
+          bash scripts/update-existing-iphone-project.sh --apply "$project" support-v1
+          cmp "$project/app/Madeira.xcodeproj/project.pbxproj" "$RUNNER_TEMP/support-v1-project.pbxproj"
+          grep -q 'fixture engine cache' "$project/engine-sentinel"
+          cmp "$RUNNER_TEMP/madeira-ios/app/Madeira/SteamRuntime.swift" "$project/app/Madeira/SteamRuntime.swift"
+          cmp "$RUNNER_TEMP/madeira-ios/app/Madeira/Info.plist" "$project/app/Madeira/Info.plist"
+      - name: Typecheck desktop installer and signed catalog on iPhone SDK
+        run: |
+          cat > "$RUNNER_TEMP/mobile-bridge-stubs.swift" <<'SWIFT'
+          func wine_process_is_running() -> Int32 { 0 }
+          func wineserver_is_running() -> Int32 { 0 }
+          func madeira_seed_prefix_if_needed(_ path: String) {}
+          SWIFT
+          xcrun --sdk iphoneos swiftc -typecheck -swift-version 5 \
+            -target arm64-apple-ios18.0 -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
+            "$RUNNER_TEMP/mobile-bridge-stubs.swift" \
+            "$RUNNER_TEMP/madeira-ios/app/Madeira/"{SteamRuntime,MobileSupportCatalog}.swift
+      - name: Compile offline catalog signer
+        run: |
+          swiftc -parse-as-library WhiskyKit/Sources/GameBridgeCore/MobileSupportCatalog.swift \
+            scripts/mobile-support-signer.swift -o "$RUNNER_TEMP/mobile-support-signer"
+      - name: Exercise local catalog publication without a production key
+        run: |
+          set -euo pipefail
+          bash -n scripts/init-mobile-support-channel.sh scripts/prepare-mobile-support-release.sh scripts/renew-mobile-support-channel.sh
+          export HOME="$RUNNER_TEMP/support-test-home"
+          mkdir -m 700 "$HOME"
+          bash scripts/init-mobile-support-channel.sh
+          out="$HOME/.gamebridge-support/release-1"
+          keyid="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["keyID"])' "$out/trust.json")"
+          pub="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["publicKey"])' "$out/trust.json")"
+          "$RUNNER_TEMP/mobile-support-signer" verify "$keyid" "$pub" "$out/steam-seed.json"
+          test "$(stat -f '%Lp' "$HOME/.gamebridge-support/ed25519.key")" = 600
+          test "$(find "$out" -type f | wc -l | tr -d ' ')" = 2
+          if bash scripts/init-mobile-support-channel.sh; then
+            echo "Initial setup must not overwrite existing release" >&2
+            exit 1
+          fi
+          if "$RUNNER_TEMP/mobile-support-signer" verify wrong-key "$pub" "$out/steam-seed.json"; then
+            echo "Incorrect trust identity was accepted" >&2
+            exit 1
+          fi
+      - name: Exercise catalog renewal with the original maintainer key
+        run: |
+          set -euo pipefail
+          export HOME="$RUNNER_TEMP/support-test-home"
+          first="$HOME/.gamebridge-support/release-1"
+          next="$HOME/.gamebridge-support/release-2"
+          bash scripts/renew-mobile-support-channel.sh "$first/steam-seed.json" "$next"
+          cmp "$first/trust.json" "$next/trust.json"
+          python3 - "$first/steam-seed.json" "$next/steam-seed.json" <<'PY'
+          import base64, json, pathlib, sys
+          def payload(path):
+              return json.loads(base64.b64decode(json.loads(pathlib.Path(path).read_bytes())["payload"]))
+          first, next = map(payload, sys.argv[1:])
+          assert next["revision"] == first["revision"] + 1
+          assert next["packages"] == first["packages"]
+          assert next["clientSHA256"] == first["clientSHA256"]
+          assert next["issuedAt"] >= first["issuedAt"]
+          assert next["expiresAt"] >= first["expiresAt"]
+          PY
+          printf '{}' > "$RUNNER_TEMP/invalid-renewal.json"
+          if bash scripts/renew-mobile-support-channel.sh "$RUNNER_TEMP/invalid-renewal.json" "$RUNNER_TEMP/invalid-publication"; then
+            echo "Invalid renewal unexpectedly accepted" >&2
+            exit 1
+          fi
+          test ! -e "$RUNNER_TEMP/invalid-publication"
+      - name: Exercise public trust activation in migrated iPhone project
+        run: |
+          set -euo pipefail
+          bash -n scripts/configure-iphone-support-trust.sh scripts/publish-mobile-support-review.sh
+          export HOME="$RUNNER_TEMP/support-test-home"
+          public="$HOME/.gamebridge-support/release-1"
+          project="$RUNNER_TEMP/madeira-old"
+          # Check the real embedded public anchor before testing configurable fixture keys.
+          python3 - "$project/app/Madeira/Info.plist" mobile/support/trust.json <<'PY'
+          import json, pathlib, plistlib, sys
+          plist, trust = map(pathlib.Path, sys.argv[1:])
+          expected = json.loads(trust.read_bytes())
+          data = plist.read_bytes()
+          parsed = plistlib.loads(data)
+          assert parsed["GameBridgeSupportKeyID"] == expected["keyID"]
+          assert parsed["GameBridgeSupportPublicKey"] == expected["publicKey"]
+          for name, placeholder in (("keyID", "$(GAMEBRIDGE_SUPPORT_KEY_ID)"),
+                                    ("publicKey", "$(GAMEBRIDGE_SUPPORT_PUBLIC_KEY)")):
+              old = ("<string>" + expected[name] + "</string>").encode()
+              assert data.count(old) == 1
+              data = data.replace(old, ("<string>" + placeholder + "</string>").encode())
+          plist.write_bytes(data)
+          PY
+          cp "$project/app/Madeira/Info.plist" "$RUNNER_TEMP/before-trust.plist"
+          cp "$project/app/Madeira.xcodeproj/project.pbxproj" "$RUNNER_TEMP/before-trust.pbxproj"
+          cp "$project/app/Madeira/Madeira.entitlements" "$RUNNER_TEMP/before-trust.entitlements"
+          bash scripts/configure-iphone-support-trust.sh --check "$project" "$public"
+          cmp "$RUNNER_TEMP/before-trust.plist" "$project/app/Madeira/Info.plist"
+          bash scripts/configure-iphone-support-trust.sh --apply "$project" "$public"
+          bash scripts/configure-iphone-support-trust.sh --apply "$project" "$public"
+          cmp "$RUNNER_TEMP/before-trust.pbxproj" "$project/app/Madeira.xcodeproj/project.pbxproj"
+          cmp "$RUNNER_TEMP/before-trust.entitlements" "$project/app/Madeira/Madeira.entitlements"
+          python3 - "$project/app/Madeira/Info.plist" "$public/trust.json" "$RUNNER_TEMP/before-trust.plist" <<'PY'
+          import json, pathlib, plistlib, sys
+          current, trust, original = map(pathlib.Path, sys.argv[1:])
+          actual = plistlib.loads(current.read_bytes())
+          key = json.loads(trust.read_bytes())
+          expected = plistlib.loads(original.read_bytes())
+          expected.update(GameBridgeSupportKeyID=key["keyID"], GameBridgeSupportPublicKey=key["publicKey"])
+          assert actual == expected
+          PY
+          mkdir "$RUNNER_TEMP/bad-public"
+          cp "$public/steam-seed.json" "$RUNNER_TEMP/bad-public/"
+          printf '{}' > "$RUNNER_TEMP/bad-public/trust.json"
+          cp "$project/app/Madeira/Info.plist" "$RUNNER_TEMP/activated.plist"
+          if bash scripts/configure-iphone-support-trust.sh --apply "$project" "$RUNNER_TEMP/bad-public"; then
+            echo "Invalid trust unexpectedly embedded" >&2
+            exit 1
+          fi
+          cmp "$RUNNER_TEMP/activated.plist" "$project/app/Madeira/Info.plist"
+      - name: Resolve app dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies -project Whisky.xcodeproj \
+            -scheme Whisky -clonedSourcePackagesDirPath build/baseline/SourcePackages
+      - name: Build unsigned Mac Debug app
+        run: bash scripts/build-local.sh

@@ -1,0 +1,532 @@
+diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
+--- a/app/Madeira/ContentView.swift
++++ b/app/Madeira/ContentView.swift
+@@ -1324,13 +1324,23 @@
+                     sessionBody
+                         .navigationBarHidden(true)
+                 } else if library.enabled {
+-                    LibraryView(play: launchLibraryEntry, enableJIT: enableJIT,
+-                                startDock: { startDock($0, compactPool: $1) })
++                    if gameBridgeShowLibrary {
++                        LibraryView(play: launchLibraryEntry, enableJIT: enableJIT,
++                                    startDock: { startDock($0, compactPool: $1) })
++                            .safeAreaInset(edge: .bottom) {
++                                Button("Return to Steam research") { gameBridgeShowLibrary = false }
++                                    .buttonStyle(.bordered)
++                                    .disabled(library.launching || library.startingJIT != nil)
++                                    .padding(8)
++                            }
++                    } else {
++                        gameBridgeSteamHome
++                    }
+                 } else {
+                     developerBody
+                 }
+             }
+-            .navigationTitle("Madeira")
++            .navigationTitle("GameBridge · Research")
+             .navigationBarTitleDisplayMode(.inline)
+             .toolbarBackground(.regularMaterial, for: .navigationBar)
+             // The library keeps a material bar only before iOS 26. From iOS 26 the
+@@ -1399,12 +1409,312 @@
+             }
+             // A Home Screen shortcut (madeira://play?exe=...) starts its library entry,
+             // now or, from a cold start, once the library is up.
+-            .onReceive(ShortcutRouter.shared.$pendingExe) { _ in launchPendingShortcut() }
+-            .onChange(of: library.enabled) { _, _ in launchPendingShortcut() }
++            // GameBridge research: only the explicit Steam desktop entry can start a session.
++            .onChange(of: library.current) { previous, current in
++                if previous != nil && current == nil {
++                    gameBridgeRecordSteamHealth(phase: "session-ended")
++                }
++            }
+         }
+     }
+ 
+-    /// The developer interface. Orientation comes from the view's own shape, not
++    @State private var gameBridgeShowLibrary = false
++    @State private var gameBridgeGPU = false
++    @State private var gameBridgeV8 = false
++    @State private var gameBridgeConfigStatus = ""
++    @State private var gameBridgePreparing = false
++    @State private var gameBridgeAuditMessage = ""
++    @State private var gameBridgeStage = "Ready to check"
++    @State private var gameBridgeSupportStatus = ""
++    @AppStorage("GameBridge.lastSteamHealth") private var gameBridgeLastSteamHealth = ""
++    @AppStorage("GameBridge.autoPrepareVC") private var gameBridgeAutoPrepareVC = false
++    // GameBridge research: use the existing in-process Wine desktop session, not Dock.
++    private var gameBridgeSteamHome: some View {
++        ScrollView {
++            VStack(spacing: 20) {
++                Image(systemName: "desktopcomputer")
++                    .font(.system(size: 52))
++                Text("Windows Steam").font(.title.bold())
++                Text("Local engine research · Not a supported Steam client yet")
++                    .multilineTextAlignment(.center)
++                    .foregroundStyle(.secondary)
++                Text("Do not sign in with a personal account until client security and stability are verified.")
++                    .multilineTextAlignment(.center)
++                Button("Open Steam") {
++                    gameBridgeOpenSteam()
++                }
++                .buttonStyle(.borderedProminent)
++                .controlSize(.large)
++                .disabled(gameBridgePreparing || library.startingJIT != nil || library.launching)
++                if gameBridgePreparing {
++                    ProgressView(gameBridgeStage)
++                } else if library.startingJIT != nil {
++                    ProgressView("Waiting for JIT permission…")
++                }
++                Text(gameBridgeStage).font(.caption).foregroundStyle(.secondary)
++                Toggle("Automatically prepare Microsoft Visual C++ 2015–2022", isOn: $gameBridgeAutoPrepareVC)
++                    .disabled(gameBridgePreparing || library.startingJIT != nil)
++                Text("Microsoft redistributable licence terms apply. Existing custom runtime folders are preserved.")
++                    .font(.caption).foregroundStyle(.secondary)
++                if !gameBridgeAuditMessage.isEmpty {
++                    Text(gameBridgeAuditMessage).font(.caption).textSelection(.enabled)
++                }
++                if let error = library.error {
++                    Text(error).foregroundStyle(.secondary).textSelection(.enabled)
++                }
++                DisclosureGroup("Experimental Steam performance") {
++                    Toggle("Chromium GPU acceleration", isOn: Binding(
++                        get: { gameBridgeGPU },
++                        set: { value in
++                            if MadeiraConfig.set("env.MADEIRA_BIG_PICTURE_GPU", value ? "1" : "0") {
++                                gameBridgeGPU = value
++                                gameBridgeConfigStatus = "GPU preference saved; applies to the next Steam session."
++                            } else { gameBridgeConfigStatus = "Could not save GPU preference." }
++                        }
++                    ))
++                    Toggle("V8 JavaScript JIT", isOn: Binding(
++                        get: { gameBridgeV8 },
++                        set: { value in
++                            if MadeiraConfig.set("env.MADEIRA_JITLESS", value ? "0" : "1") {
++                                gameBridgeV8 = value
++                                gameBridgeConfigStatus = "V8 preference saved; applies to the next Steam session."
++                            } else { gameBridgeConfigStatus = "Could not save V8 preference." }
++                        }
++                    ))
++                    Text("Test one option at a time. Turn both off if Steam hangs; no game data is removed.")
++                        .font(.caption).foregroundStyle(.secondary)
++                    Text(gameBridgeConfigStatus).font(.caption)
++                }
++                .disabled(gameBridgePreparing || library.startingJIT != nil || library.launching)
++                .onAppear {
++                    gameBridgeGPU = MadeiraConfig.flag("MADEIRA_BIG_PICTURE_GPU", fallback: false)
++                    gameBridgeV8 = !MadeiraConfig.flag("MADEIRA_JITLESS", fallback: true)
++                }
++
++                Button("Open experimental native game library") {
++                    gameBridgeShowLibrary = true
++                }
++                .buttonStyle(.bordered)
++                .disabled(gameBridgePreparing || library.startingJIT != nil || library.launching)
++                Text("For local game launch testing. Account sign-in, downloads and Dock are not yet verified in GameBridge.")
++                    .font(.caption).foregroundStyle(.secondary)
++
++                Button("Prepare / repair Steam") {
++                    gameBridgeOpenSteam(launch: false)
++                }
++                .buttonStyle(.bordered)
++                .disabled(gameBridgePreparing || library.startingJIT != nil || library.launching)
++                Button("Check GitHub support updates") {
++                    gameBridgeCheckSupport()
++                }
++                .buttonStyle(.bordered)
++                .disabled(gameBridgePreparing || library.startingJIT != nil || library.launching)
++                if !gameBridgeSupportStatus.isEmpty {
++                    Text(gameBridgeSupportStatus).font(.caption).textSelection(.enabled)
++                }
++                Button("Enable JIT") { enableJIT() }
++                    .buttonStyle(.bordered)
++                    .disabled(gameBridgePreparing || library.startingJIT != nil || jitStatus == .testing)
++                DisclosureGroup("iPhone diagnostics") {
++                    Text(gameBridgeDiagnostics)
++                        .font(.caption.monospaced())
++                        .textSelection(.enabled)
++                        .frame(maxWidth: .infinity, alignment: .leading)
++                    ShareLink(item: gameBridgeDiagnostics) {
++                        Label("Share diagnostic summary", systemImage: "square.and.arrow.up")
++                    }
++                    if let report = gameBridgeSupportIssueURL {
++                        Link("Report component problem on GitHub", destination: report)
++                        Text("Review before submitting. GitHub issues may be public; only module states and failure codes are included.")
++                            .font(.caption).foregroundStyle(.secondary)
++                    }
++                }
++            }
++            .padding(24)
++            .frame(maxWidth: 480)
++            .frame(maxWidth: .infinity)
++        }
++    }
++
++    // Install only verified build-time resources; preserve user-installed fonts.
++    private func gameBridgePrepareChineseFonts(prefix: URL) {
++        let fm = FileManager.default
++        guard let resources = Bundle.main.resourceURL?.appendingPathComponent("fonts-ja") else { return }
++        let fonts = prefix.appendingPathComponent("drive_c/windows/Fonts")
++        let names = ["NotoSansCJKsc-Regular.otf", "NotoSansCJKhk-Regular.otf"]
++        do {
++            try fm.createDirectory(at: fonts, withIntermediateDirectories: true)
++            for name in names {
++                let source = resources.appendingPathComponent(name)
++                let target = fonts.appendingPathComponent(name)
++                if fm.fileExists(atPath: target.path) { continue }
++                guard fm.fileExists(atPath: source.path) else {
++                    LogStore.shared.log("[gamebridge-fonts] bundled resource missing: \(name)")
++                    continue
++                }
++                try fm.copyItem(at: source, to: target)
++                LogStore.shared.log("[gamebridge-fonts] installed \(name)")
++            }
++        } catch {
++            LogStore.shared.log("[gamebridge-fonts] installation incomplete: \(error.localizedDescription)")
++        }
++    }
++
++    private func gameBridgeCheckSupport() {
++        guard !gameBridgePreparing, library.current == nil, library.startingJIT == nil,
++              !library.launching, wine_process_is_running() == 0, wineserver_is_running() == 0 else { return }
++        gameBridgePreparing = true
++        gameBridgeStage = "Checking signed GitHub support catalog…"
++        Task { @MainActor in
++            defer { gameBridgePreparing = false }
++            do {
++                gameBridgeSupportStatus = try await SteamRuntimeInstaller.shared.checkDesktopSupport()
++                gameBridgeStage = "Support check complete"
++            } catch {
++                gameBridgeSupportStatus = "Support catalog unavailable or invalid; existing client files unchanged."
++                gameBridgeStage = "Support check incomplete"
++            }
++        }
++    }
++
++    private func gameBridgeOpenSteam(launch: Bool = true) {
++        guard !gameBridgePreparing, library.current == nil, library.startingJIT == nil,
++              !library.launching, !VCRedistModel.shared.busy,
++              wine_process_is_running() == 0, wineserver_is_running() == 0 else { return }
++        library.error = nil
++        guard SigningStatus.current.debuggable else {
++            gameBridgeStage = "Development signing required"
++            library.error = "Install a development-signed research build with get-task-allow before enabling JIT."
++            return
++        }
++        gameBridgeAuditMessage = ""
++        gameBridgePreparing = true
++        Task { @MainActor in
++            defer { gameBridgePreparing = false }
++            do {
++                guard let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
++                    throw SteamRuntimeFiles.Failure.prefixMissing
++                }
++                let prefix = documents.appendingPathComponent("wine")
++                gameBridgeStage = "Checking and preparing official Steam components…"
++                gameBridgeRecordSteamHealth(phase: "before-preparation")
++                try await SteamRuntimeInstaller.shared.prepareDesktopBootstrap(prefix: prefix)
++                gameBridgePrepareChineseFonts(prefix: prefix)
++                gameBridgeRecordSteamHealth(phase: "after-preparation")
++                guard LibraryEntry.steamClientInstalled else { throw SteamRuntimeFiles.Failure.invalidPackage }
++                gameBridgeStage = "Checking game dependencies…"
++                await gameBridgeAudit(prefix: prefix)
++                if gameBridgeAutoPrepareVC {
++                    gameBridgeStage = "Preparing Visual C++ runtimes…"
++                    do {
++                        try await VCRedistModel.shared.prepareForSteam()
++                        LogStore.shared.log("[gamebridge] Visual C++ v14 checked; overlay applies at guest startup.")
++                    } catch {
++                        try Task.checkCancellation()
++                        gameBridgeAuditMessage += " Optional Visual C++ preparation incomplete; existing files kept."
++                        LogStore.shared.log("[gamebridge] optional VC preparation incomplete: \(error.localizedDescription)")
++                    }
++                }
++                guard library.current == nil, wine_process_is_running() == 0,
++                      wineserver_is_running() == 0 else { throw SteamRuntimeFiles.Failure.activeSession }
++                if launch {
++                    gameBridgeStage = "Requesting local Windows Steam session"
++                    launchLibraryEntry(.bigPictureEntry)
++                } else {
++                    gameBridgeStage = "Component preparation complete; Steam not started"
++                }
++            } catch {
++                gameBridgeStage = "Preparation incomplete"
++                gameBridgeRecordSteamHealth(phase: "preparation-failed")
++                library.error = error.localizedDescription
++            }
++        }
++    }
++
++    /// Deliberately excludes file paths, device identifiers, account names and raw logs.
++    private var gameBridgeDiagnostics: String {
++        let memory = ProcessInfo.processInfo.physicalMemory / (1024 * 1024)
++        let signing = SigningStatus.current.debuggable ? "development/debuggable" : "not debuggable"
++        let ready = StikJITHelper.ready ? "ready" : "not ready"
++        let bootstrap = LibraryEntry.steamClientInstalled ? "present" : "absent"
++        let guest = wine_process_is_running() != 0 || wineserver_is_running() != 0 ? "active" : "idle"
++        return [
++            "GameBridge iOS research",
++            "OS: \(UIDevice.current.systemVersion)",
++            "Physical memory MiB: \(memory)",
++            "Signing: \(signing)",
++            "JIT: \(ready)",
++            "Steam bootstrap: \(bootstrap)",
++            "Wine session: \(guest)",
++            "Last requested stage: \(gameBridgeStage)",
++            "Last component report: \(gameBridgeLastSteamHealth)",
++            "Recent loader signals: \(MobileSupportSignals.shared.recent().joined(separator: ", "))",
++            "Steam login and gameplay acceptance: unverified"
++        ].joined(separator: "\n")
++    }
++
++    private var gameBridgeSupportIssueURL: URL? {
++        guard !gameBridgeLastSteamHealth.isEmpty || !MobileSupportSignals.shared.recent().isEmpty else { return nil }
++        var parts = URLComponents(string: "https://github.com/enoswong/GameBridge/issues/new")
++        let signals = MobileSupportSignals.shared.recent().joined(separator: ", ")
++        let body = "GameBridge iOS research component report\n"
++            + "iOS: \(UIDevice.current.systemVersion)\n"
++            + "Component states: \(gameBridgeLastSteamHealth)\n"
++            + "Recent loader signals: \(signals)\n"
++        parts?.queryItems = [
++            URLQueryItem(name: "title", value: "[iOS] Steam component failure"),
++            URLQueryItem(name: "body", value: body)
++        ]
++        return parts?.url
++    }
++
++    /// Record only a bounded list of known component names and their PE state.
++    /// UserDefaults is outside the guest Documents directory; no automatic upload.
++    private func gameBridgeRecordSteamHealth(phase: String) {
++        guard let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
++        let drive = documents.appendingPathComponent("wine/drive_c").resolvingSymlinksInPath()
++        let base = "Program Files/Steam Big Picture/"
++        let modules = ["steam.exe", "bin/vgui2_s.dll", "win64/vgui2_s.dll",
++                       "steamclient.dll", "steamclient64.dll", "steamui.dll",
++                       "bin/filesystem_stdio.dll", "win64/filesystem_stdio.dll"]
++        var states: [String: String] = [:]
++        for name in modules {
++            guard let url = try? SteamRuntimeFiles.destination(base + name, under: drive),
++                  let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]),
++                  values.isRegularFile == true, values.isSymbolicLink == false else {
++                states[name] = "missing-or-conflict"; continue
++            }
++            guard let size = values.fileSize, size > 0, size <= 64 * 1024 * 1024,
++                  let imports = try? PortableWindowsImportReader.read(url) else {
++                states[name] = "invalid-or-unreadable"; continue
++            }
++            states[name] = imports.architecture
++        }
++        let report: [String: Any] = ["schema": 1, "phase": phase, "modules": states]
++        if let data = try? JSONSerialization.data(withJSONObject: report, options: [.sortedKeys]),
++           let json = String(data: data, encoding: .utf8) {
++            gameBridgeLastSteamHealth = json
++            LogStore.shared.log("[gamebridge-health] " + json)
++        }
++    }
++
++    private func gameBridgeAudit(prefix: URL) async {
++        do {
++            let audit = try await Task.detached(priority: .utility) {
++                try SteamDirectoryAudit.scan(prefix: prefix)
++            }.value
++            let families = audit.unresolvedFamilies.joined(separator: ", ")
++            gameBridgeAuditMessage = "Checked \(audit.reports.count) game folders."
++            if !families.isEmpty { gameBridgeAuditMessage += " Unresolved imports: \(families)." }
++            if audit.isPartial { gameBridgeAuditMessage += " Partial scan; more checks are needed." }
++            LogStore.shared.log("[gamebridge] " + gameBridgeAuditMessage)
++        } catch {
++            gameBridgeAuditMessage = "Dependency scan unavailable; Steam remains available."
++            LogStore.shared.log("[gamebridge] " + gameBridgeAuditMessage)
++        }
++    }
++
++    /// The developer interface. Orientation comes from the view's own shape, not
+     /// verticalSizeClass: iPad is .regular in BOTH orientations, so the size-class
+     /// test kept the portrait tooling (badges, buttons, log) on screen after
+     /// rotating. On iPad the keyboard is excluded from the measurement, otherwise
+diff --git a/app/Madeira/Library.swift b/app/Madeira/Library.swift
+--- a/app/Madeira/Library.swift
++++ b/app/Madeira/Library.swift
+@@ -145,14 +145,7 @@
+ /// interface the default.
+ enum FrontendChoice {
+     static let key = "madeiraFrontend"
+-    static let startup: (useNew: Bool, source: String) = {
+-        if let stored = UserDefaults.standard.string(forKey: key), ["new", "old"].contains(stored) {
+-            return (stored == "new", "setting")
+-        }
+-        if let configured = MadeiraConfig.get("env.MADEIRA_FRONTEND") { return (configured != "0", "config") }
+-        if let value = getenv("MADEIRA_FRONTEND").map({ String(cString: $0) }) { return (value != "0", "environment") }
+-        return (MadeiraConfig.flag("MADEIRA_FRONTEND_DEFAULT_NEW"), "default")
+-    }()
++    static let startup: (useNew: Bool, source: String) = (true, "gamebridge-steam-research")
+     /// The interface the next start uses.
+     static var preferNew: Bool {
+         guard let stored = UserDefaults.standard.string(forKey: key), ["new", "old"].contains(stored) else { return startup.useNew }
+@@ -586,7 +579,7 @@
+     /// .steamBigPicture) carries the launcher-chain memory lines a 64-bit Chromium
+     /// host needs and the swap tier with the donor pool.
+     static var bigPictureEntry: LibraryEntry {
+-        var entry = LibraryEntry(title: "Big Picture", relativePath: "big-picture.bat", bits: 64)
++        var entry = LibraryEntry(title: "Windows Steam", relativePath: "big-picture.bat", bits: 64)
+         entry.id = bigPictureID; entry.bigPicture = true; entry.graphicsAPI = "Steam"; entry.launchMode = "desktop"
+         return entry
+     }
+@@ -626,64 +619,44 @@
+     var listedInLibrary: Bool { bigPicture != true || Self.bigPictureShown }
+     /// The button is offered when Big Picture's folder has a client, or the Dock's steam.exe
+     /// can seed one.
+-    static var steamClientInstalled: Bool {
+-        let fm = FileManager.default
+-        if let bp = bigPictureFolder, fm.fileExists(atPath: "\(bp.unix)/steam.exe") { return true }
+-        return dockSteamFolder != nil
+-    }
++    static var steamClientInstalled: Bool {
++        guard let folder = bigPictureFolder else { return false }
++        let executable = URL(fileURLWithPath: folder.unix).appendingPathComponent("steam.exe")
++        let values = try? executable.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
++        return values?.isRegularFile == true && values?.isSymbolicLink == false
++    }
+     /// Writes C:\big-picture.bat for this launch, seeding Big Picture's folder with the
+     /// Dock's steam.exe when it has none yet. False, having logged why, when there is no client.
+     @discardableResult
+-    static func writeBigPictureBatch() -> Bool {
+-        let fm = FileManager.default
+-        guard let folder = bigPictureFolder,
+-              let documents = fm.urls(for: .documentDirectory, in: .userDomainMask).first else { return false }
+-        if !fm.fileExists(atPath: "\(folder.unix)/steam.exe") {
+-            guard let dock = dockSteamFolder else {
+-                LogStore.shared.log("[big-picture] no Steam client to start from: prepare Madeira Dock's Steam components first", level: .error)
+-                return false
+-            }
+-            do {
+-                try fm.createDirectory(atPath: folder.unix, withIntermediateDirectories: true)
+-                try fm.copyItem(atPath: "\(dock.unix)/steam.exe", toPath: "\(folder.unix)/steam.exe")
+-                LogStore.shared.log("[big-picture] seeded \(folder.windows) with the Dock's steam.exe; Valve's client completes itself there on this first run (a download from Valve's CDN)")
+-            } catch {
+-                LogStore.shared.log("[big-picture] could not seed \(folder.windows): \(error.localizedDescription)", level: .error)
+-                return false
+-            }
+-        }
+-        // ml2210: once the 32-bit client and its web helper (bin/cef/cef.win7) are in place,
+-        // the bootstrapper neither updates itself nor the client, so a later run cannot move
+-        // it to the 64-bit client, whose CEF pools do not fit the address space.
+-        // env.MADEIRA_BIG_PICTURE_PIN = 0 lets it update as before.
+-        let pinned = MadeiraConfig.flag("MADEIRA_BIG_PICTURE_PIN", fallback: true)
+-            && fm.fileExists(atPath: "\(folder.unix)/bin/cef/cef.win7/steamwebhelper.exe")
+-        if pinned { LogStore.shared.log("[big-picture] ml2210 the installed 32-bit client is kept: no bootstrap update this run") }
+-        // ml2230: env.MADEIRA_BIG_PICTURE_GPU = 1 lets the web helper draw with the GPU (Chromium's
+-        // ANGLE on the 32-bit D3D11); off by default, software drawing as before.
+-        let gpu = MadeiraConfig.flag("MADEIRA_BIG_PICTURE_GPU", fallback: false)
+-        if gpu { LogStore.shared.log("[big-picture] ml2230 the web helper may use the GPU (env.MADEIRA_BIG_PICTURE_GPU = 1)") }
+-        listMadeiraLibraries(in: folder)
+-        let bat = [
+-            "@echo off",
+-            "rem Generated by Madeira (ml2021) for Big Picture; rewritten at every launch.",
+-            "start \"\" \"C:\\windows\\system32\\services.exe\"",
+-            "cd /d \"\(folder.windows)\"",
+-            "\"\(folder.windows)\\steam.exe\" -bigpicture -no-cef-sandbox" + (gpu ? "" : " -cef-disable-gpu") + " -console -nocrashmonitor"
+-                + (pinned ? " -nobootstrapperupdate -skipinitialbootstrap" : "")
+-                + " -cef-disable-features=SegmentationPlatform,OptimizationTargetPrediction,OptimizationHints",
+-        ].joined(separator: "\r\n") + "\r\n"
+-        let path = documents.appendingPathComponent("wine/drive_c/big-picture.bat").path
+-        do {
+-            try bat.write(toFile: path, atomically: true, encoding: .utf8)
+-        } catch {
+-            LogStore.shared.log("[big-picture] could not write big-picture.bat: \(error.localizedDescription)", level: .error)
+-            return false
+-        }
+-        LogStore.shared.log("[big-picture] steam.exe -bigpicture from \(folder.windows) in the Wine desktop")
+-        return true
+-    }
+-
++    static func writeBigPictureBatch() -> Bool {
++        guard steamClientInstalled, let folder = bigPictureFolder,
++              let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
++            LogStore.shared.log("[gamebridge-steam] isolated client is missing", level: .error)
++            return false
++        }
++        // The research desktop uses a separate client, not the pinned Dock install.
++        // Do not disable Chromium sandboxing or prevent Steam security updates.
++        let gpu = MadeiraConfig.flag("MADEIRA_BIG_PICTURE_GPU", fallback: false)
++        LogStore.shared.log("[gamebridge-steam] CEF GPU acceleration requested=\(gpu ? 1 : 0)")
++        listMadeiraLibraries(in: folder)
++        let bat = [
++            "@echo off",
++            "rem GameBridge desktop Steam research",
++            "start \"\" \"C:\\windows\\system32\\services.exe\"",
++            "cd /d \"\(folder.windows)\"",
++            "\"\(folder.windows)\\steam.exe\"" + (gpu ? "" : " -cef-disable-gpu"),
++        ].joined(separator: "\r\n") + "\r\n"
++        let path = documents.appendingPathComponent("wine/drive_c/big-picture.bat")
++        do {
++            try bat.write(to: path, atomically: true, encoding: .utf8)
++        } catch {
++            LogStore.shared.log("[gamebridge-steam] could not create launch batch: \(error.localizedDescription)",
++                                level: .error)
++            return false
++        }
++        LogStore.shared.log("[gamebridge-steam] starting genuine desktop client")
++        return true
++    }
+     /// ml2230: Big Picture's client lists the games Madeira installed. Its libraryfolders.vdf
+     /// (config/, the one Valve's client reads, and its steamapps/ copy) gets Madeira's Steam
+     /// library (the Dock client's folder, where downloads go) and the libraries on connected
+diff --git a/app/Madeira/MadeiraApp.swift b/app/Madeira/MadeiraApp.swift
+--- a/app/Madeira/MadeiraApp.swift
++++ b/app/Madeira/MadeiraApp.swift
+@@ -25,7 +25,7 @@
+         // Games and downloads keep going when Madeira leaves the screen (BackgroundRun.swift).
+         BackgroundRun.shared.start()
+         // Read the cached library before the first grid page is built.
+-        if LibraryGridArm.enabled, SteamOwnedLibrary.enabled { SteamOwnedLibrary.shared.start() }
++        // GameBridge research: keep Steam login in Valve's desktop client.
+     }
+ 
+     var body: some Scene {
+@@ -46,8 +46,7 @@
+                 // else a shared game setup (a .madeirasetup file or madeira://setup?d=..., GameSetupShare.swift),
+                 // else madeira://play?exe=... (Home Screen shortcuts, SavesAndShortcuts.swift).
+                 .onOpenURL { url in
+-                    if JITNetworkShortcut.shared.handle(url) || GameSetupInbox.shared.handle(url) { return }
+-                    ShortcutRouter.shared.handle(url)
++                    _ = JITNetworkShortcut.shared.handle(url)
+                 }
+         }
+     }
+diff --git a/app/Madeira/GameRecommendations.swift b/app/Madeira/GameRecommendations.swift
+--- a/app/Madeira/GameRecommendations.swift
++++ b/app/Madeira/GameRecommendations.swift
+@@ -1201,6 +1201,6 @@
+     /// are logged at 30 s.
+     static let steamBigPicture = GameRecommendation(
+-        id: "steam-big-picture", title: "Steam Big Picture", version: 6,
++        id: "steam-big-picture", title: "Steam Big Picture", version: 7,
+         config: """
+         # Madeira's recommended settings for Steam Big Picture.
+         # Reset to Recommended, at the bottom of the game's settings, brings them back.
+@@ -1219,6 +1219,8 @@
+         env.MADEIRA_GDI_SHARED_SECTION = 1
+         env.MADEIRA_STEAM_ALLOW_CRASHPAD = 1
+         env.MADEIRA_CEF_VERBOSE = 0
++        env.MADEIRA_NLS_EXTRA = 1
++        env.MADEIRA_FONT_KEYS_REPAIR = 1
+         env.MADEIRA_SRW_HANG_KILL_S = 40
+         env.MADEIRA_TOUCH_MOUSE = 1
+         env.MADEIRA_WOW_MIN_FREE_GB = 2
+diff --git a/app/Madeira/MadeiraDock.swift b/app/Madeira/MadeiraDock.swift
+--- a/app/Madeira/MadeiraDock.swift
++++ b/app/Madeira/MadeiraDock.swift
+@@ -141,6 +141,12 @@
+     static func steamLibraries(drive: URL) -> [String] {
+         let clientLibrary = SteamRuntimeFiles.relativeRoot + "/steamapps"
+         var libraries = [clientLibrary]
++        // Discover the isolated desktop client's installed games without changing its files.
++        let desktopLibrary = "Program Files/Steam Big Picture/steamapps"
++        var isDirectory: ObjCBool = false
++        if FileManager.default.fileExists(atPath: drive.appendingPathComponent(desktopLibrary).path, isDirectory: &isDirectory), isDirectory.boolValue {
++            libraries.append(desktopLibrary)
++        }
+         if let data = try? Data(contentsOf: drive.appendingPathComponent(clientLibrary + "/libraryfolders.vdf")),
+            data.count <= 1 << 20, var parser = try? SteamKeyValues(data), let root = try? parser.read() {
+             for (_, entry) in (root["libraryfolders"]?.fields ?? [:]).sorted(by: { $0.key < $1.key }) {

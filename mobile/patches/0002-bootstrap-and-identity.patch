@@ -1,0 +1,334 @@
+diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
+--- a/app/Madeira/SteamRuntime.swift
++++ b/app/Madeira/SteamRuntime.swift
+@@ -325,6 +325,248 @@
+         await progress("Steam components are ready.")
+     }
+ 
+-    private static func hash(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
++    /// Seed one coherent official client set. Existing updated clients are never downgraded.
++    /// Missing-file repair is allowed only when all existing pinned files match byte-for-byte.
++    func prepareDesktopBootstrap(prefix: URL) async throws {
++        guard !busy, wine_process_is_running() == 0, wineserver_is_running() == 0 else {
++            throw SteamRuntimeFiles.Failure.activeSession
++        }
++        busy = true
++        defer { busy = false }
++        let fm = FileManager.default
++        let prefix = prefix.resolvingSymlinksInPath().standardizedFileURL
++        let drive = prefix.appendingPathComponent("drive_c")
++        let relative = "Program Files/Steam Big Picture"
++        _ = try SteamRuntimeFiles.destination(relative, under: drive)
++        let target = try SteamRuntimeFiles.destination(relative + "/steam.exe", under: drive)
++        func machine(_ file: URL) -> UInt16? {
++            guard let values = try? file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
++                  values.isRegularFile == true, values.isSymbolicLink == false,
++                  let handle = try? FileHandle(forReadingFrom: file) else { return nil }
++            defer { try? handle.close() }
++            guard let data = try? handle.read(upToCount: 64), data.count == 64,
++                  data.prefix(2) == Data([0x4d, 0x5a]) else { return nil }
++            let offset = UInt64(data[60]) | UInt64(data[61]) << 8 | UInt64(data[62]) << 16 | UInt64(data[63]) << 24
++            guard offset >= 64, offset <= 1_048_576 else { return nil }
++            do {
++                try handle.seek(toOffset: offset)
++                guard let pe = try handle.read(upToCount: 6), pe.count == 6,
++                      pe.prefix(4) == Data([0x50, 0x45, 0, 0]) else { return nil }
++                return UInt16(pe[4]) | UInt16(pe[5]) << 8
++            } catch { return nil }
++        }
++        let clientMachine = machine(target)
++        func hasModule(_ name: String, _ expected: UInt16) -> Bool {
++            guard let url = try? SteamRuntimeFiles.destination(relative + "/" + name, under: drive) else { return false }
++            return machine(url) == expected
++        }
++        let has32 = clientMachine == 0x14c && hasModule("bin/vgui2_s.dll", 0x14c)
++            && hasModule("steamclient.dll", 0x14c) && hasModule("steamui.dll", 0x14c)
++            && hasModule("bin/filesystem_stdio.dll", 0x14c)
++        let has64 = clientMachine == 0x8664 && hasModule("win64/vgui2_s.dll", 0x8664)
++            && hasModule("steamclient64.dll", 0x8664) && hasModule("win64/filesystem_stdio.dll", 0x8664)
++        let pendingKey = "GameBridge.steamSeedPending.v1"
++        if (has32 || has64) && !UserDefaults.standard.bool(forKey: pendingKey) {
++            // A refresh failure must not prevent an otherwise intact client starting.
++            _ = try? await desktopSupportCatalog(forceRefresh: false)
++            try Task.checkCancellation()
++            return
++        }
++        // Keep an existing updated or foreign install intact. No mixed-version overwrite.
++        let catalog = try await desktopSupportCatalog(forceRefresh: true)
++        let packages = catalog?.packages ?? SteamRuntimeFiles.packages.map {
++            MobileSupportCatalog.Package(file: $0.file, bytes: $0.bytes, sha256: $0.sha256)
++        }
++        let clientHash = catalog?.clientSHA256 ?? SteamRuntimeFiles.clientSHA256
++        let stage = fm.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent("gamebridge-steam-" + UUID().uuidString)
++        try fm.createDirectory(at: stage, withIntermediateDirectories: false)
++        defer { try? fm.removeItem(at: stage) }
++        let configuration = URLSessionConfiguration.ephemeral
++        configuration.httpCookieStorage = nil
++        configuration.urlCredentialStorage = nil
++        configuration.timeoutIntervalForRequest = 60
++        configuration.timeoutIntervalForResource = 900
++        let session = URLSession(configuration: configuration, delegate: SteamRuntimeRedirects(), delegateQueue: nil)
++        defer { session.invalidateAndCancel() }
++        var names = Set<String>(), files: [String] = []
++        for package in packages {
++            try Task.checkCancellation()
++            guard let url = URL(string: SteamRuntimeFiles.origin + package.file) else {
++                throw SteamRuntimeFiles.Failure.invalidPackage
++            }
++            let archive = try await Self.downloadDesktopArchive(package, url: url, session: session)
++            try SteamRuntimeFiles.unpack(archive) { name, bytes in
++                guard names.insert(name.lowercased()).inserted else { throw SteamRuntimeFiles.Failure.invalidPackage }
++                let file = try SteamRuntimeFiles.destination(name, under: stage)
++                try fm.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
++                try bytes.write(to: file, options: .withoutOverwriting)
++                files.append(name)
++            }
++        }
++        guard machine(stage.appendingPathComponent("steam.exe")) == 0x14c,
++              machine(stage.appendingPathComponent("bin/vgui2_s.dll")) == 0x14c,
++              machine(stage.appendingPathComponent("steamui.dll")) == 0x14c,
++              machine(stage.appendingPathComponent("steamclient.dll")) == 0x14c,
++              machine(stage.appendingPathComponent("bin/filesystem_stdio.dll")) == 0x14c,
++              Self.hash(try Data(contentsOf: stage.appendingPathComponent("steamclient64.dll"))) == clientHash else {
++            throw SteamRuntimeFiles.Failure.invalidPackage
++        }
++        try Task.checkCancellation()
++        guard wine_process_is_running() == 0, wineserver_is_running() == 0 else {
++            throw SteamRuntimeFiles.Failure.activeSession
++        }
++        if !fm.fileExists(atPath: prefix.appendingPathComponent(".update-timestamp").path),
++           ["system.reg", "user.reg"].contains(where: { fm.fileExists(atPath: prefix.appendingPathComponent($0).path) }) {
++            throw SteamRuntimeFiles.Failure.conflict
++        }
++        madeira_seed_prefix_if_needed(prefix.path)
++        // Verify every existing file in the known cohort before copying any missing file.
++        // steam.exe is installed last; interrupted first installs can be retried.
++        var missing: [(URL, URL)] = []
++        for name in files.sorted(by: { ($0 == "steam.exe" ? 1 : 0, $0) < ($1 == "steam.exe" ? 1 : 0, $1) }) {
++            let destination = try SteamRuntimeFiles.destination(relative + "/" + name, under: drive)
++            let source = stage.appendingPathComponent(name)
++            if fm.fileExists(atPath: destination.path) {
++                let values = try destination.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
++                guard values.isRegularFile == true, values.isSymbolicLink == false,
++                      fm.contentsEqual(atPath: destination.path, andPath: source.path) else {
++                    throw SteamRuntimeFiles.Failure.conflict
++                }
++            } else {
++                missing.append((source, destination))
++            }
++        }
++        UserDefaults.standard.set(true, forKey: pendingKey)
++        for (source, destination) in missing {
++            try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
++            let temp = destination.deletingLastPathComponent().appendingPathComponent(".gamebridge-" + UUID().uuidString)
++            defer { try? fm.removeItem(at: temp) }
++            try fm.copyItem(at: source, to: temp)
++            try fm.moveItem(at: temp, to: destination)
++        }
++        UserDefaults.standard.removeObject(forKey: pendingKey)
++    }
++
++    /// Bound retries to transient HTTP or transport failures. Integrity failures never retry.
++    private static func downloadDesktopArchive(
++        _ package: MobileSupportCatalog.Package, url: URL, session: URLSession
++    ) async throws -> Data {
++        let fm = FileManager.default
++        let transientStatuses: Set<Int> = [408, 429, 500, 502, 503, 504]
++        let transientErrors: Set<URLError.Code> = [
++            .timedOut, .cannotFindHost, .cannotConnectToHost, .networkConnectionLost,
++            .dnsLookupFailed, .notConnectedToInternet
++        ]
++        for attempt in 0..<3 {
++            try Task.checkCancellation()
++            do {
++                let (temporary, response) = try await session.download(from: url)
++                defer { try? fm.removeItem(at: temporary) }
++                guard let http = response as? HTTPURLResponse,
++                      http.url?.host == url.host, http.url?.scheme == "https" else {
++                    throw SteamRuntimeFiles.Failure.invalidPackage
++                }
++                if transientStatuses.contains(http.statusCode), attempt < 2 {
++                    try await Task.sleep(nanoseconds: UInt64(5 * (attempt + 1)) * 1_000_000_000)
++                    continue
++                }
++                guard http.statusCode == 200,
++                      (try temporary.resourceValues(forKeys: [.fileSizeKey])).fileSize == package.bytes else {
++                    throw SteamRuntimeFiles.Failure.invalidPackage
++                }
++                let archive = try Data(contentsOf: temporary, options: .mappedIfSafe)
++                guard Self.hash(archive) == package.sha256 else { throw SteamRuntimeFiles.Failure.invalidPackage }
++                return archive
++            } catch let error as URLError {
++                try Task.checkCancellation()
++                guard transientErrors.contains(error.code), attempt < 2 else { throw error }
++                try await Task.sleep(nanoseconds: UInt64(5 * (attempt + 1)) * 1_000_000_000)
++            }
++        }
++        throw SteamRuntimeFiles.Failure.invalidPackage
++    }
++
++    /// The configured trust anchor is part of the native app signature. There is no
++    /// production signing key in source control; unconfigured builds use bundled pins.
++    func checkDesktopSupport() async throws -> String {
++        guard !busy, wine_process_is_running() == 0, wineserver_is_running() == 0 else {
++            throw SteamRuntimeFiles.Failure.activeSession
++        }
++        busy = true
++        defer { busy = false }
++        if let payload = try await desktopSupportCatalog(forceRefresh: true) {
++            return "Verified GitHub catalog revision \(payload.revision) (network or valid cache)"
++        }
++        return "Bundled pins in use; no verified GitHub catalog available."
++    }
++
++    private func desktopSupportCatalog(forceRefresh: Bool) async throws -> MobileSupportCatalog.Payload? {
++        let info = Bundle.main
++        let keyID = info.object(forInfoDictionaryKey: "GameBridgeSupportKeyID") as? String ?? ""
++        let encodedKey = info.object(forInfoDictionaryKey: "GameBridgeSupportPublicKey") as? String ?? ""
++        if (keyID.isEmpty || keyID == "$(GAMEBRIDGE_SUPPORT_KEY_ID)") && (encodedKey.isEmpty || encodedKey == "$(GAMEBRIDGE_SUPPORT_PUBLIC_KEY)") { return nil }
++        guard !keyID.isEmpty, keyID.utf8.count <= 64,
++              let publicKey = Data(base64Encoded: encodedKey), publicKey.count == 32 else {
++            throw SteamRuntimeFiles.Failure.invalidPackage
++        }
++        // This is only a data endpoint; archive downloads still go directly to Valve.
++        let url = URL(string: "https://raw.githubusercontent.com/enoswong/GameBridge/refs/heads/support-catalog/mobile/steam-seed.json")!
++        let store = UserDefaults.standard
++        let cacheKey = "GameBridge.acceptedSteamCatalog." + keyID
++        let cached = store.data(forKey: cacheKey)
++        struct Cached: Codable {
++            let envelope: Data
++            let revision: Int
++            let digest: String
++            let checkedAt: Int?
++        }
++        let previous = try cached.map { try JSONDecoder().decode(Cached.self, from: $0) }
++        let now = Int(Date().timeIntervalSince1970)
++        func verify(_ data: Data) throws -> MobileSupportCatalog.Verified {
++            try MobileSupportCatalog.verify(data, keyID: keyID, publicKey: publicKey, now: now,
++                minimumRevision: previous?.revision ?? 0, acceptedDigest: previous?.digest)
++        }
++        if !forceRefresh, let previous, let checkedAt = previous.checkedAt,
++           checkedAt <= now, now - checkedAt < 86400,
++           let verified = try? verify(previous.envelope) {
++            return verified.payload
++        }
++        let config = URLSessionConfiguration.ephemeral
++        config.httpCookieStorage = nil
++        config.urlCredentialStorage = nil
++        config.timeoutIntervalForRequest = 15
++        config.timeoutIntervalForResource = 30
++        let session = URLSession(configuration: config, delegate: SteamRuntimeRedirects(), delegateQueue: nil)
++        defer { session.invalidateAndCancel() }
++        do {
++            var request = URLRequest(url: url)
++            request.cachePolicy = .reloadIgnoringLocalCacheData
++            let (stream, response) = try await session.bytes(for: request)
++            guard let http = response as? HTTPURLResponse, http.statusCode == 200, http.url == url,
++                  http.expectedContentLength <= Int64(MobileSupportCatalog.maxEnvelopeBytes) else {
++                throw SteamRuntimeFiles.Failure.invalidPackage
++            }
++            var data = Data()
++            for try await byte in stream {
++                try Task.checkCancellation()
++                guard data.count < MobileSupportCatalog.maxEnvelopeBytes else {
++                    throw SteamRuntimeFiles.Failure.invalidPackage
++                }
++                data.append(byte)
++            }
++            let verified = try verify(data)
++            let accepted = Cached(envelope: data, revision: verified.payload.revision,
++                                  digest: verified.digest, checkedAt: now)
++            store.set(try JSONEncoder().encode(accepted), forKey: cacheKey)
++            return verified.payload
++        } catch {
++            try Task.checkCancellation()
++            if let previous { return try verify(previous.envelope).payload }
++            // No previously accepted revision: the shipped pins remain the fallback.
++            return nil
++        }
++    }
++
++    private static func hash(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+ }
+ #endif
+diff --git a/app/Madeira/Info.plist b/app/Madeira/Info.plist
+--- a/app/Madeira/Info.plist
++++ b/app/Madeira/Info.plist
+@@ -15,8 +15,12 @@
+ 	<true/>
+ 	<key>CFBundleDevelopmentRegion</key>
+ 	<string>en</string>
+-	<key>CFBundleDisplayName</key>
+-	<string>Madeira</string>
++	<key>CFBundleDisplayName</key>
++	<string>GameBridge Research</string>
++	<key>GameBridgeSupportKeyID</key>
++	<string>98c7f873c4973474</string>
++	<key>GameBridgeSupportPublicKey</key>
++	<string>A9s82dRDX1u3Z/+RZebiEGr+alk8Aqg20VPV/SVSDTk=</string>
+ 	<key>CFBundleDocumentTypes</key>
+ 	<array>
+ 		<dict>
+@@ -51,7 +55,7 @@
+ 			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+ 			<key>CFBundleURLSchemes</key>
+ 			<array>
+-				<string>madeira</string>
++				<string>gamebridge-research</string>
+ 			</array>
+ 		</dict>
+ 	</array>
+diff --git a/app/Madeira/JITNetwork.swift b/app/Madeira/JITNetwork.swift
+--- a/app/Madeira/JITNetwork.swift
++++ b/app/Madeira/JITNetwork.swift
+@@ -291,9 +291,9 @@
+             URLQueryItem(name: "name", value: Self.name),
+             URLQueryItem(name: "input", value: "text"),
+             URLQueryItem(name: "text", value: input),
+-            URLQueryItem(name: "x-success", value: "madeira://jit-network/success"),
++            URLQueryItem(name: "x-success", value: "gamebridge-research://jit-network/success"),
+-            URLQueryItem(name: "x-error", value: "madeira://jit-network/error"),
++            URLQueryItem(name: "x-error", value: "gamebridge-research://jit-network/error"),
+-            URLQueryItem(name: "x-cancel", value: "madeira://jit-network/cancel")
++            URLQueryItem(name: "x-cancel", value: "gamebridge-research://jit-network/cancel")
+         ]
+         guard let url = c.url else { completion(.failed("bad shortcut URL")); return }
+         LogStore.shared.log("[jit-shortcut] run input=\(input)")
+@@ -309,7 +309,7 @@
+     /// madeira://jit-network/{success|error|cancel}, from Shortcuts' x-callback-url.
+     @discardableResult
+     func handle(_ url: URL) -> Bool {
+-        guard url.scheme == "madeira", url.host == "jit-network" else { return false }
++        guard url.scheme == "gamebridge-research", url.host == "jit-network" else { return false }
+         let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+         let value = { (name: String) in query.first { $0.name == name }?.value ?? "" }
+         switch url.path {
+diff --git a/app/Madeira.xcodeproj/project.pbxproj b/app/Madeira.xcodeproj/project.pbxproj
+--- a/app/Madeira.xcodeproj/project.pbxproj
++++ b/app/Madeira.xcodeproj/project.pbxproj
+@@ -1304,9 +1304,9 @@
+ 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+ 				GCC_WARN_UNUSED_FUNCTION = YES;
+ 				GCC_WARN_UNUSED_VARIABLE = YES;
+-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+-				MADEIRA_BUNDLE_IDENTIFIER = com.willfaust.madeora;
+-				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
++				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
++				MADEIRA_BUNDLE_IDENTIFIER = org.enostudio.gamebridge.research;
++				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+ 				MTL_FAST_MATH = YES;
+ 				ONLY_ACTIVE_ARCH = YES;
+ 				SDKROOT = iphoneos;
+@@ -1333,9 +1333,9 @@
+ 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+ 				GCC_WARN_UNUSED_FUNCTION = YES;
+ 				GCC_WARN_UNUSED_VARIABLE = YES;
+-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+-				MADEIRA_BUNDLE_IDENTIFIER = com.willfaust.madeora;
+-				MTL_ENABLE_DEBUG_INFO = NO;
++				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
++				MADEIRA_BUNDLE_IDENTIFIER = org.enostudio.gamebridge.research;
++				MTL_ENABLE_DEBUG_INFO = NO;
+ 				MTL_FAST_MATH = YES;
+ 				SDKROOT = iphoneos;
+ 				SWIFT_COMPILATION_MODE = wholemodule;

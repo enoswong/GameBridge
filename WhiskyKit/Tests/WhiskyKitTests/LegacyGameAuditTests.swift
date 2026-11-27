@@ -75,6 +75,29 @@ final class LegacyGameAuditTests: XCTestCase {
         }
     }
 
+    func testSteamPreflightReportsDamageAndSkipsUninstalledGames() throws {
+        let root = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let installed = root.appending(path: "installed")
+        try FileManager.default.createDirectory(at: installed, withIntermediateDirectories: true)
+        try fixture(is64Bit: false).write(to: installed.appending(path: "game.exe"))
+        let games = [
+            SteamInstalledGame(appID: 10, name: "Installed", buildID: nil,
+                               installDirectory: installed, libraryURL: root, stateFlags: 4, platform: .windowsWine),
+            SteamInstalledGame(appID: 20, name: "Damaged", buildID: nil,
+                               installDirectory: root.appending(path: "missing"), libraryURL: root,
+                               stateFlags: 32, platform: .windowsWine),
+            SteamInstalledGame(appID: 30, name: "Uninstalled", buildID: nil,
+                               installDirectory: root.appending(path: "uninstalled"), libraryURL: root,
+                               stateFlags: 2, platform: .windowsWine)
+        ]
+        let audit = try SteamLibraryPreflight.inspect(games: games, prefix: root)
+        XCTAssertEqual(audit.reports.count, 1)
+        XCTAssertEqual(audit.damagedGames.map(\.appID), [20])
+        XCTAssertTrue(audit.hasUnresolvedImports)
+        XCTAssertTrue(audit.issues.isEmpty)
+    }
+
     private func temporaryFolder() throws -> URL {
         let url = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)

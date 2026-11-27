@@ -22,9 +22,11 @@ import PackageDescription
 let package = Package(
     name: "WhiskyKit",
     platforms: [
-        .macOS(.v14)
+        .macOS(.v14),
+        .iOS(.v17)
     ],
     products: [
+        .library(name: "GameBridgeCore", targets: ["GameBridgeCore"]),
         .library(
             name: "WhiskyKit",
             targets: ["WhiskyKit"]
@@ -34,9 +36,11 @@ let package = Package(
       .package(url: "https://github.com/SwiftPackageIndex/SemanticVersion.git", from: "0.3.0")
     ],
     targets: [
+        .target(name: "GameBridgeCore"),
+        .testTarget(name: "GameBridgeCoreTests", dependencies: ["GameBridgeCore"]),
         .target(
             name: "WhiskyKit",
-            dependencies: ["SemanticVersion"]
+            dependencies: ["SemanticVersion", "GameBridgeCore"]
         ),
         .testTarget(
             name: "WhiskyKitTests",

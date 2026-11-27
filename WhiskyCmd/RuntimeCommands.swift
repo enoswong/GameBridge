@@ -234,6 +234,7 @@ extension Whisky.Runtime {
         @Option var environment: String
         @Option var appID: UInt32?
         @Flag(help: "Ask Windows Steam to verify this game’s original files.") var verifyFiles = false
+        @Flag(help: "Install supported missing shared components before opening Steam.") var repairLibrary = false
         @Flag(help: "Use a fixed Wine desktop to diagnose transparent-window input.") var virtualDesktop = false
         @Option(
             help: "Trace window/input events for one executable basename (Wine 11 diagnostic only)."
@@ -253,22 +254,41 @@ extension Whisky.Runtime {
             )
             try await coordinator.markStatus(.running, lease: lease)
             do {
-                let repair = GameFileRepair(
-                    engine: installed, lease: lease, root: URL(fileURLWithPath: options.root), log: Self.log
-                )
-                let verify = try await prepareGame(steamPath: steamPath, repair: repair)
-                if verify { Self.announce("verifyingGameFiles") }
-                let request = LaunchRequest(environmentID: environment, appID: appID, verifyFiles: verify)
-                try await RuntimeAdapter.launch(
-                    request: request, engine: installed, lease: lease, virtualDesktop: virtualDesktop,
-                    traceWindowProcess: traceWindowProcess,
-                    control: { event in try? Whisky.Runtime.emit(event) },
-                    log: Self.log
-                )
+                try await executeSession(steamPath: steamPath, installed: installed, lease: lease)
                 try await coordinator.markStatus(lease.environment.status, lease: lease)
             } catch {
                 try? await coordinator.markStatus(.needsAttention, lease: lease)
                 throw error
+            }
+        }
+
+        private func executeSession(
+            steamPath: String, installed: InstalledEngine, lease: EnvironmentLease
+        ) async throws {
+            let repair = GameFileRepair(
+                engine: installed, lease: lease, root: URL(fileURLWithPath: options.root), log: Self.log
+            )
+            let maintenance = SteamSessionMaintenance(
+                repair: repair, shouldRepair: repairLibrary, announce: Self.announce
+            )
+            if appID == nil { try await maintenance.prepare(steamPath: steamPath) }
+            let verify = try await prepareGame(steamPath: steamPath, repair: repair)
+            let baseline = appID == nil ? maintenance.revisions(steamPath: steamPath) : nil
+            let observer = appID == nil ? maintenance.observe(steamPath: steamPath, baseline: baseline) : nil
+            defer { observer?.cancel() }
+            if verify { Self.announce("verifyingGameFiles") }
+            let request = LaunchRequest(environmentID: environment, appID: appID, verifyFiles: verify)
+            try await RuntimeAdapter.launch(
+                request: request, engine: installed, lease: lease, virtualDesktop: virtualDesktop,
+                traceWindowProcess: traceWindowProcess,
+                control: { event in try? Whisky.Runtime.emit(event) },
+                log: Self.log
+            )
+            if let observer {
+                observer.cancel()
+                try await maintenance.finish(
+                    steamPath: steamPath, baseline: baseline, observedChange: await observer.value
+                )
             }
         }
 

@@ -45,10 +45,12 @@ struct SetupView: View {
     @State var operationID = UUID()
     @State private var acceptedTerms = false
     @State private var showTerms = false
+    @State var showAdvancedSettings = false
     @State var loaded = false
     @State var loadFailed = false
     @State var rosettaInstalled = Rosetta2.isRosettaInstalled
     @State var bootstrapStage: BootstrapStage?
+    @AppStorage("GameBridge.autoRepairLibrary") var autoRepairLibrary = false
     @State var gameLibrary: [SteamInstalledGame]?
     @State var libraryEnvironment: String?
     @State var lastLaunch: (environment: String, appID: UInt32?)?
@@ -58,14 +60,9 @@ struct SetupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Windows 遊戲").font(.title2.bold())
+            Text("Windows Steam").font(.title2.bold())
             playerControls
                 .disabled(busy)
-            LegacyGameControls(environment: selection) { arguments in
-                let succeeded = await run(arguments)
-                return succeeded ? log : nil
-            }
-            .disabled(busy || !loaded)
             if busy {
                 HStack {
                     ProgressView().controlSize(.small)
@@ -73,10 +70,20 @@ struct SetupView: View {
                 }
             }
             if !message.isEmpty { Text(message).font(.callout).textSelection(.enabled) }
-            DisclosureGroup("進階設定") {
-                VStack(alignment: .leading, spacing: 12) { advancedControls }
-                    .padding(.top, 8)
-                    .disabled(busy)
+            DisclosureGroup("進階設定", isExpanded: $showAdvancedSettings) {
+                VStack(alignment: .leading, spacing: 12) {
+                    advancedControls
+                    LegacyGameControls(environment: selection) { arguments in
+                        let succeeded = await run(arguments)
+                        return succeeded ? log : nil
+                    }
+                    .disabled(!loaded)
+                    if let selected = selection, selected.status == .ready, selected.steamRelativePath != nil {
+                        DisclosureGroup("已安裝遊戲（診斷用途）") { gameControls(for: selected) }
+                    }
+                }
+                .padding(.top, 8)
+                .disabled(busy)
             }
             if !embedded {
                 Button("關閉") { showSetup = false }.keyboardShortcut(.cancelAction)
@@ -141,7 +148,7 @@ struct SetupView: View {
         } else if let selected = selection, selected.steamRelativePath != nil {
             switch selected.status {
             case .ready:
-                gameControls(for: selected)
+                steamReadyControls(for: selected)
             case .running:
                 Text("Steam 正在執行。可在 Steam 收藏庫切換遊戲。")
                     .foregroundStyle(.secondary)
@@ -157,7 +164,7 @@ struct SetupView: View {
                 Text("準備 Windows 版 Steam，之後用你的 Steam 帳號安裝遊戲。")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Button(acceptedTerms || selection != nil ? "繼續設定" : "開始設定") {
+                Button(acceptedTerms || selection != nil ? "繼續設定" : "開啟 Steam") {
                     if acceptedTerms {
                         startBootstrap()
                     } else {
@@ -183,10 +190,19 @@ struct SetupView: View {
     }
 
     @ViewBuilder
+    private func steamReadyControls(for selected: RuntimeEnvironment) -> some View {
+        Text("直接在 Windows Steam 安裝、更新及遊玩。")
+            .foregroundStyle(.secondary)
+        Button("開啟 Steam") { Task { await launchSteam(in: selected.id) } }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+        if failedLaunchEnvironment == selected.id { retryButton(for: selected) }
+        Toggle("自動補齊遊戲的 Microsoft 共用元件", isOn: $autoRepairLibrary)
+            .help("開啟 Steam 前檢查已安裝遊戲。啟用後允許使用已驗證的 Microsoft 安裝器補齊元件。")
+    }
+
+    @ViewBuilder
     private func gameControls(for environment: RuntimeEnvironment) -> some View {
-        if failedLaunchEnvironment == environment.id {
-            retryButton(for: environment)
-        }
         if libraryEnvironment == environment.id, let gameLibrary {
             if gameLibrary.isEmpty {
                 Text("在 Steam 登入後，將遊戲安裝到預設位置。")
@@ -207,17 +223,15 @@ struct SetupView: View {
         } else {
             ProgressView("正在載入遊戲…")
         }
-        Button("開啟 Steam") { Task { await launchSteam(in: environment.id) } }
     }
 
     private func retryButton(for environment: RuntimeEnvironment) -> some View {
-        let appID = lastLaunch?.environment == environment.id ? lastLaunch?.appID : nil
-        return Button(appID == nil ? "修復並重試" : "驗證遊戲檔案") {
+        Button("修復並重試") {
             Task {
                 if environment.status != .ready {
                     guard await run(["recover", "--environment", environment.id]) else { return }
                 }
-                await launchSteam(in: environment.id, appID: appID, verifyFiles: appID != nil)
+                await launchSteam(in: environment.id)
             }
         }
         .buttonStyle(.borderedProminent)
