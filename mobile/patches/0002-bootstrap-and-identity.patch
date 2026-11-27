@@ -1,7 +1,7 @@
 diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
 --- a/app/Madeira/SteamRuntime.swift
 +++ b/app/Madeira/SteamRuntime.swift
-@@ -325,6 +325,187 @@
+@@ -325,6 +325,217 @@
          await progress("Steam components are ready.")
      }
  
@@ -20,33 +20,41 @@ diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
 +        let relative = "Program Files/Steam Big Picture"
 +        _ = try SteamRuntimeFiles.destination(relative, under: drive)
 +        let target = try SteamRuntimeFiles.destination(relative + "/steam.exe", under: drive)
-+        func validPE(_ file: URL) -> Bool {
++        func machine(_ file: URL) -> UInt16? {
 +            guard let values = try? file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
 +                  values.isRegularFile == true, values.isSymbolicLink == false,
-+                  let handle = try? FileHandle(forReadingFrom: file) else { return false }
++                  let handle = try? FileHandle(forReadingFrom: file) else { return nil }
 +            defer { try? handle.close() }
 +            guard let data = try? handle.read(upToCount: 64), data.count == 64,
-+                  data.prefix(2) == Data([0x4d, 0x5a]) else { return false }
++                  data.prefix(2) == Data([0x4d, 0x5a]) else { return nil }
 +            let offset = UInt64(data[60]) | UInt64(data[61]) << 8 | UInt64(data[62]) << 16 | UInt64(data[63]) << 24
-+            guard offset >= 64, offset <= 1_048_576 else { return false }
++            guard offset >= 64, offset <= 1_048_576 else { return nil }
 +            do {
 +                try handle.seek(toOffset: offset)
 +                guard let pe = try handle.read(upToCount: 6), pe.count == 6,
-+                      pe.prefix(4) == Data([0x50, 0x45, 0, 0]) else { return false }
-+                return (pe[4] == 0x4c && pe[5] == 1) || (pe[4] == 0x64 && pe[5] == 0x86)
-+            } catch { return false }
++                      pe.prefix(4) == Data([0x50, 0x45, 0, 0]) else { return nil }
++                return UInt16(pe[4]) | UInt16(pe[5]) << 8
++            } catch { return nil }
 +        }
-+        let hasClient = validPE(target)
-+        func hasModule(_ name: String) -> Bool {
++        let clientMachine = machine(target)
++        func hasModule(_ name: String, _ expected: UInt16) -> Bool {
 +            guard let url = try? SteamRuntimeFiles.destination(relative + "/" + name, under: drive) else { return false }
-+            return validPE(url)
++            return machine(url) == expected
 +        }
-+        let hasGUI = hasModule("bin/vgui2_s.dll") || hasModule("win64/vgui2_s.dll")
-+        let hasClientLibrary = hasModule("steamclient.dll") || hasModule("steamclient64.dll")
++        let has32 = clientMachine == 0x14c && hasModule("bin/vgui2_s.dll", 0x14c)
++            && hasModule("steamclient.dll", 0x14c) && hasModule("steamui.dll", 0x14c)
++            && hasModule("bin/filesystem_stdio.dll", 0x14c)
++        let has64 = clientMachine == 0x8664 && hasModule("win64/vgui2_s.dll", 0x8664)
++            && hasModule("steamclient64.dll", 0x8664) && hasModule("win64/filesystem_stdio.dll", 0x8664)
 +        let pendingKey = "GameBridge.steamSeedPending.v1"
-+        if hasClient && hasGUI && hasClientLibrary && !UserDefaults.standard.bool(forKey: pendingKey) { return }
++        if (has32 || has64) && !UserDefaults.standard.bool(forKey: pendingKey) {
++            // A refresh failure must not prevent an otherwise intact client starting.
++            _ = try? await desktopSupportCatalog(forceRefresh: false)
++            try Task.checkCancellation()
++            return
++        }
 +        // Keep an existing updated or foreign install intact. No mixed-version overwrite.
-+        let catalog = try await desktopSupportCatalog()
++        let catalog = try await desktopSupportCatalog(forceRefresh: true)
 +        let packages = catalog?.packages ?? SteamRuntimeFiles.packages.map {
 +            MobileSupportCatalog.Package(file: $0.file, bytes: $0.bytes, sha256: $0.sha256)
 +        }
@@ -84,8 +92,11 @@ diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
 +                files.append(name)
 +            }
 +        }
-+        guard validPE(stage.appendingPathComponent("steam.exe")),
-+              validPE(stage.appendingPathComponent("bin/vgui2_s.dll")),
++        guard machine(stage.appendingPathComponent("steam.exe")) == 0x14c,
++              machine(stage.appendingPathComponent("bin/vgui2_s.dll")) == 0x14c,
++              machine(stage.appendingPathComponent("steamui.dll")) == 0x14c,
++              machine(stage.appendingPathComponent("steamclient.dll")) == 0x14c,
++              machine(stage.appendingPathComponent("bin/filesystem_stdio.dll")) == 0x14c,
 +              Self.hash(try Data(contentsOf: stage.appendingPathComponent("steamclient64.dll"))) == clientHash else {
 +            throw SteamRuntimeFiles.Failure.invalidPackage
 +        }
@@ -127,7 +138,19 @@ diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
 +
 +    /// The configured trust anchor is part of the native app signature. There is no
 +    /// production signing key in source control; unconfigured builds use bundled pins.
-+    private func desktopSupportCatalog() async throws -> MobileSupportCatalog.Payload? {
++    func checkDesktopSupport() async throws -> String {
++        guard !busy, wine_process_is_running() == 0, wineserver_is_running() == 0 else {
++            throw SteamRuntimeFiles.Failure.activeSession
++        }
++        busy = true
++        defer { busy = false }
++        if let payload = try await desktopSupportCatalog(forceRefresh: true) {
++            return "Verified GitHub catalog revision \(payload.revision) (network or valid cache)"
++        }
++        return "Bundled pins in use; no verified GitHub catalog available."
++    }
++
++    private func desktopSupportCatalog(forceRefresh: Bool) async throws -> MobileSupportCatalog.Payload? {
 +        let info = Bundle.main
 +        let keyID = info.object(forInfoDictionaryKey: "GameBridgeSupportKeyID") as? String ?? ""
 +        let encodedKey = info.object(forInfoDictionaryKey: "GameBridgeSupportPublicKey") as? String ?? ""
@@ -145,12 +168,18 @@ diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
 +            let envelope: Data
 +            let revision: Int
 +            let digest: String
++            let checkedAt: Int?
 +        }
 +        let previous = try cached.map { try JSONDecoder().decode(Cached.self, from: $0) }
 +        let now = Int(Date().timeIntervalSince1970)
 +        func verify(_ data: Data) throws -> MobileSupportCatalog.Verified {
 +            try MobileSupportCatalog.verify(data, keyID: keyID, publicKey: publicKey, now: now,
 +                minimumRevision: previous?.revision ?? 0, acceptedDigest: previous?.digest)
++        }
++        if !forceRefresh, let previous, let checkedAt = previous.checkedAt,
++           checkedAt <= now, now - checkedAt < 86400,
++           let verified = try? verify(previous.envelope) {
++            return verified.payload
 +        }
 +        let config = URLSessionConfiguration.ephemeral
 +        config.httpCookieStorage = nil
@@ -176,7 +205,8 @@ diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
 +                data.append(byte)
 +            }
 +            let verified = try verify(data)
-+            let accepted = Cached(envelope: data, revision: verified.payload.revision, digest: verified.digest)
++            let accepted = Cached(envelope: data, revision: verified.payload.revision,
++                                  digest: verified.digest, checkedAt: now)
 +            store.set(try JSONEncoder().encode(accepted), forKey: cacheKey)
 +            return verified.payload
 +        } catch {
