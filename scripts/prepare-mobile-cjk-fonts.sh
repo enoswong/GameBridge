@@ -33,3 +33,17 @@ for file in "$temp"/*; do
     cp -n "$file" "$dest/"
 done
 echo "Verified Chinese font resources staged in $dest; existing fonts retained."
+
+# CP850 and CP10000 are requested by the device log even in the English desktop.
+# Stage the exact Wine revision's tables into the primary NLS directory, not only extra/.
+dest="$workspace/app/Madeira/nls"
+[[ -d "$dest" && ! -L "$dest" ]]
+origin="https://raw.githubusercontent.com/willfaust/wine/ddf92babc5ba71f4586cc4713f5a8eb39f63d39b"
+for file in "$temp"/*; do [[ ! -f "$file" ]] || rm -- "$file"; done
+fetch nls/c_850.nls c_850.nls 7b8fcaee181db36c3dc85eb89490b8cb8c1a22b1
+fetch nls/c_10000.nls c_10000.nls 80f8055857aa3e8b1ac96f686f92f745482918fd
+for file in "$temp"/*; do
+    [[ -f "$file" ]] || continue
+    cp -n "$file" "$dest/"
+done
+echo "Verified missing CP850 and CP10000 tables staged in $dest."
