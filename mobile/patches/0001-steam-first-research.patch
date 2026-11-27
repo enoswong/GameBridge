@@ -413,6 +413,50 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
      /// verticalSizeClass: iPad is .regular in BOTH orientations, so the size-class
      /// test kept the portrait tooling (badges, buttons, log) on screen after
      /// rotating. On iPad the keyboard is excluded from the measurement, otherwise
+@@ -2765,10 +3144,43 @@
+         MadeiraExtensionProbe.runIfRequested()   /* ml1310: env.MADEIRA_EXT_PROBE = 1 only */
+ 
+         // Start a main thread heartbeat to diagnose hang
+         var heartbeatCount = 0
++        // GameBridge: reuse this session timer, independently of the optional FPS HUD.
++        var presentStart: TimeInterval?
++        var presentBase: UInt64 = 0
++        var presentMode: Int32 = -1
++        var presentThermal = 0
+         let heartbeat = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+             heartbeatCount += 1
+             os_log("[HEARTBEAT] main thread alive #%d", heartbeatCount)
++            // This is DXMT's shown-frame counter, not CADisplayLink ticks or per-frame timing.
++            guard wine_process_is_running() != 0, UIApplication.shared.applicationState == .active else {
++                presentStart = nil
++                return
++            }
++            let now = ProcessInfo.processInfo.systemUptime
++            let frames = madeira_shown_frame_count()
++            let mode = madeira_get_vsync_locked()
++            let thermal = ProcessInfo.processInfo.thermalState.rawValue
++            if let start = presentStart {
++                let elapsed = now - start
++                if elapsed > 10 || frames < presentBase || mode != presentMode {
++                    logStore.log("[gamebridge-present-gap] duration_ms=\(Int(max(0, elapsed) * 1000))")
++                    presentStart = nil
++                } else {
++                    presentThermal = max(presentThermal, thermal)
++                    if elapsed >= 5 {
++                        logStore.log("[gamebridge-present] frames=\(frames - presentBase) duration_ms=\(Int(elapsed * 1000)) mode=\(mode) thermal=\(presentThermal)")
++                        presentStart = nil
++                    }
++                }
++            }
++            if presentStart == nil {
++                presentStart = now
++                presentBase = frames
++                presentMode = mode
++                presentThermal = thermal
++            }
+         }
+ 
+         // Pause UI flushing — prevents ALL SwiftUI re-renders during Wine execution,
 diff --git a/app/Madeira/Library.swift b/app/Madeira/Library.swift
 --- a/app/Madeira/Library.swift
 +++ b/app/Madeira/Library.swift
