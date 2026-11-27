@@ -17,13 +17,18 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
              .navigationBarTitleDisplayMode(.inline)
              .toolbarBackground(.regularMaterial, for: .navigationBar)
              // The library keeps a material bar only before iOS 26. From iOS 26 the
-@@ -1399,12 +1398,152 @@
+@@ -1399,12 +1398,190 @@
              }
              // A Home Screen shortcut (madeira://play?exe=...) starts its library entry,
              // now or, from a cold start, once the library is up.
 -            .onReceive(ShortcutRouter.shared.$pendingExe) { _ in launchPendingShortcut() }
 -            .onChange(of: library.enabled) { _, _ in launchPendingShortcut() }
 +            // GameBridge research: only the explicit Steam desktop entry can start a session.
++            .onChange(of: library.current) { previous, current in
++                if previous != nil && current == nil {
++                    gameBridgeRecordSteamHealth(phase: "session-ended")
++                }
++            }
          }
      }
  
@@ -31,6 +36,7 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +    @State private var gameBridgePreparing = false
 +    @State private var gameBridgeAuditMessage = ""
 +    @State private var gameBridgeStage = "Ready to check"
++    @AppStorage("GameBridge.lastSteamHealth") private var gameBridgeLastSteamHealth = ""
 +    @AppStorage("GameBridge.autoPrepareVC") private var gameBridgeAutoPrepareVC = false
 +    // GameBridge research: use the existing in-process Wine desktop session, not Dock.
 +    private var gameBridgeSteamHome: some View {
@@ -104,10 +110,10 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +                    throw SteamRuntimeFiles.Failure.prefixMissing
 +                }
 +                let prefix = documents.appendingPathComponent("wine")
-+                if !LibraryEntry.steamClientInstalled {
-+                    gameBridgeStage = "Downloading and verifying official Steam…"
-+                    try await SteamRuntimeInstaller.shared.prepareDesktopBootstrap(prefix: prefix)
-+                }
++                gameBridgeStage = "Checking and preparing official Steam components…"
++                gameBridgeRecordSteamHealth(phase: "before-preparation")
++                try await SteamRuntimeInstaller.shared.prepareDesktopBootstrap(prefix: prefix)
++                gameBridgeRecordSteamHealth(phase: "after-preparation")
 +                guard LibraryEntry.steamClientInstalled else { throw SteamRuntimeFiles.Failure.invalidPackage }
 +                gameBridgeStage = "Checking game dependencies…"
 +                await gameBridgeAudit(prefix: prefix)
@@ -128,6 +134,7 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +                launchLibraryEntry(.bigPictureEntry)
 +            } catch {
 +                gameBridgeStage = "Preparation incomplete"
++                gameBridgeRecordSteamHealth(phase: "preparation-failed")
 +                library.error = error.localizedDescription
 +            }
 +        }
@@ -149,8 +156,39 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +            "Steam bootstrap: \(bootstrap)",
 +            "Wine session: \(guest)",
 +            "Last requested stage: \(gameBridgeStage)",
++            "Last component report: \(gameBridgeLastSteamHealth)",
 +            "Steam login and gameplay acceptance: unverified"
 +        ].joined(separator: "\n")
++    }
++
++    /// Record only a bounded list of known component names and their PE state.
++    /// UserDefaults is outside the guest Documents directory; no automatic upload.
++    private func gameBridgeRecordSteamHealth(phase: String) {
++        guard let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
++        let drive = documents.appendingPathComponent("wine/drive_c")
++        let base = "Program Files/Steam Big Picture/"
++        let modules = ["steam.exe", "bin/vgui2_s.dll", "win64/vgui2_s.dll",
++                       "steamclient.dll", "steamclient64.dll", "steamui.dll",
++                       "bin/filesystem_stdio.dll", "win64/filesystem_stdio.dll"]
++        var states: [String: String] = [:]
++        for name in modules {
++            guard let url = try? SteamRuntimeFiles.destination(base + name, under: drive),
++                  let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]),
++                  values.isRegularFile == true, values.isSymbolicLink == false else {
++                states[name] = "missing-or-conflict"; continue
++            }
++            guard let size = values.fileSize, size > 0, size <= 64 * 1024 * 1024,
++                  let imports = try? PortableWindowsImportReader.read(url) else {
++                states[name] = "invalid-or-unreadable"; continue
++            }
++            states[name] = imports.architecture
++        }
++        let report: [String: Any] = ["schema": 1, "phase": phase, "modules": states]
++        if let data = try? JSONSerialization.data(withJSONObject: report, options: [.sortedKeys]),
++           let json = String(data: data, encoding: .utf8) {
++            gameBridgeLastSteamHealth = json
++            LogStore.shared.log("[gamebridge-health] " + json)
++        }
 +    }
 +
 +    private func gameBridgeAudit(prefix: URL) async {
