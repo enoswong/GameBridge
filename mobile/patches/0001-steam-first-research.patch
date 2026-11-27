@@ -1,13 +1,24 @@
 diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 --- a/app/Madeira/ContentView.swift
 +++ b/app/Madeira/ContentView.swift
-@@ -1324,13 +1324,12 @@
+@@ -1324,13 +1324,23 @@
                      sessionBody
                          .navigationBarHidden(true)
                  } else if library.enabled {
 -                    LibraryView(play: launchLibraryEntry, enableJIT: enableJIT,
 -                                startDock: { startDock($0, compactPool: $1) })
-+                    gameBridgeSteamHome
++                    if gameBridgeShowLibrary {
++                        LibraryView(play: launchLibraryEntry, enableJIT: enableJIT,
++                                    startDock: { startDock($0, compactPool: $1) })
++                            .safeAreaInset(edge: .bottom) {
++                                Button("Return to Steam research") { gameBridgeShowLibrary = false }
++                                    .buttonStyle(.bordered)
++                                    .disabled(library.launching || library.startingJIT != nil)
++                                    .padding(8)
++                            }
++                    } else {
++                        gameBridgeSteamHome
++                    }
                  } else {
                      developerBody
                  }
@@ -17,7 +28,7 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
              .navigationBarTitleDisplayMode(.inline)
              .toolbarBackground(.regularMaterial, for: .navigationBar)
              // The library keeps a material bar only before iOS 26. From iOS 26 the
-@@ -1399,12 +1398,271 @@
+@@ -1399,12 +1409,280 @@
              }
              // A Home Screen shortcut (madeira://play?exe=...) starts its library entry,
              // now or, from a cold start, once the library is up.
@@ -33,6 +44,7 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
      }
  
 -    /// The developer interface. Orientation comes from the view's own shape, not
++    @State private var gameBridgeShowLibrary = false
 +    @State private var gameBridgePreparing = false
 +    @State private var gameBridgeAuditMessage = ""
 +    @State private var gameBridgeStage = "Ready to check"
@@ -73,6 +85,14 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +                if let error = library.error {
 +                    Text(error).foregroundStyle(.secondary).textSelection(.enabled)
 +                }
++                Button("Open experimental native game library") {
++                    gameBridgeShowLibrary = true
++                }
++                .buttonStyle(.bordered)
++                .disabled(gameBridgePreparing || library.startingJIT != nil || library.launching)
++                Text("For local game launch testing. Account sign-in, downloads and Dock are not yet verified in GameBridge.")
++                    .font(.caption).foregroundStyle(.secondary)
++
 +                Button("Prepare / repair Steam") {
 +                    gameBridgeOpenSteam(launch: false)
 +                }
