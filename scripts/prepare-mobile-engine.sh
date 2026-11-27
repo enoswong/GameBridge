@@ -94,6 +94,7 @@ if [[ "$mode" == *build ]]; then
     fi
     if [[ "$research_ui" == 1 ]]; then
         bash "$root/scripts/prepare-mobile-cjk-fonts.sh" "$workspace"
+        bash "$root/scripts/stage-mobile-native-probe.sh" "$workspace"
     fi
     printf 'Building mobile research IPA (not a GameBridge release).\n'
     # The upstream CI path assumes separate native/i386 cache jobs. Run the full
