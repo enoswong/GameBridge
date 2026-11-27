@@ -149,6 +149,27 @@ jobs:
           cmp "$RUNNER_TEMP/madeira-ios/app/Madeira/SteamRuntime.swift" "$RUNNER_TEMP/madeira-old/app/Madeira/SteamRuntime.swift"
           cmp "$RUNNER_TEMP/madeira-ios/app/Madeira/ContentView.swift" "$RUNNER_TEMP/madeira-old/app/Madeira/ContentView.swift"
           cmp "$RUNNER_TEMP/madeira-ios/app/Madeira/MobileSupportCatalog.swift" "$RUNNER_TEMP/madeira-old/app/Madeira/MobileSupportCatalog.swift"
+      - name: Test incremental iPhone update from signed support-v1
+        run: |
+          set -euo pipefail
+          baseline=1bfd71316184ffddb23a763fdad9772e398dc988
+          git fetch --no-tags --depth=1 origin "$baseline"
+          git clone --shared "$RUNNER_TEMP/madeira-ios" "$RUNNER_TEMP/madeira-support-v1"
+          project="$RUNNER_TEMP/madeira-support-v1"
+          git -C "$project" remote set-url origin https://github.com/willfaust/Madeira.git
+          mkdir "$RUNNER_TEMP/support-v1-patches"
+          for patch in mobile/patches/*.patch; do
+            git show "$baseline:$patch" > "$RUNNER_TEMP/support-v1-patches/$(basename "$patch")"
+          done
+          git -C "$project" apply "$RUNNER_TEMP/support-v1-patches/"*.patch
+          printf 'fixture engine cache' > "$project/engine-sentinel"
+          cp "$project/app/Madeira.xcodeproj/project.pbxproj" "$RUNNER_TEMP/support-v1-project.pbxproj"
+          bash scripts/update-existing-iphone-project.sh --check "$project" support-v1
+          bash scripts/update-existing-iphone-project.sh --apply "$project" support-v1
+          cmp "$project/app/Madeira.xcodeproj/project.pbxproj" "$RUNNER_TEMP/support-v1-project.pbxproj"
+          grep -q 'fixture engine cache' "$project/engine-sentinel"
+          cmp "$RUNNER_TEMP/madeira-ios/app/Madeira/SteamRuntime.swift" "$project/app/Madeira/SteamRuntime.swift"
+          cmp "$RUNNER_TEMP/madeira-ios/app/Madeira/Info.plist" "$project/app/Madeira/Info.plist"
       - name: Typecheck desktop installer and signed catalog on iPhone SDK
         run: |
           cat > "$RUNNER_TEMP/mobile-bridge-stubs.swift" <<'SWIFT'
