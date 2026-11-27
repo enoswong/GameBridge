@@ -45,7 +45,7 @@ jobs:
           git -C "$RUNNER_TEMP/madeira" apply --check "$GITHUB_WORKSPACE/mobile/patches/"*.patch
           git -C "$RUNNER_TEMP/madeira" apply "$GITHUB_WORKSPACE/mobile/patches/"*.patch
           git -C "$RUNNER_TEMP/madeira" diff --stat
-          for name in RuntimeDependencyPolicy PortableWindowsImportReader PortableLegacyGameAudit SteamDirectoryAudit; do
+          for name in RuntimeDependencyPolicy PortableWindowsImportReader PortableLegacyGameAudit SteamDirectoryAudit MobileSupportCatalog; do
             cmp "$GITHUB_WORKSPACE/WhiskyKit/Sources/GameBridgeCore/$name.swift" "$RUNNER_TEMP/madeira/app/Madeira/$name.swift"
           done
       - name: Check pinned engine source revisions
@@ -107,7 +107,7 @@ jobs:
           git -C "$RUNNER_TEMP/madeira-ios" apply "$GITHUB_WORKSPACE/mobile/patches/"*.patch
           xcrun --sdk iphoneos swiftc -frontend -parse -swift-version 5 \
             -target arm64-apple-ios18.0 -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
-            "$RUNNER_TEMP/madeira-ios/app/Madeira/"{ContentView,Library,MadeiraApp,SteamRuntime,VCRedist,JITNetwork,RuntimeDependencyPolicy,PortableWindowsImportReader,PortableLegacyGameAudit,SteamDirectoryAudit}.swift
+            "$RUNNER_TEMP/madeira-ios/app/Madeira/"{ContentView,Library,MadeiraApp,SteamRuntime,VCRedist,JITNetwork,RuntimeDependencyPolicy,PortableWindowsImportReader,PortableLegacyGameAudit,SteamDirectoryAudit,MobileSupportCatalog}.swift
           xcrun plutil -lint "$RUNNER_TEMP/madeira-ios/app/Madeira/Info.plist" "$RUNNER_TEMP/madeira-ios/app/Madeira.xcodeproj/project.pbxproj"
       - name: Resolve app dependencies
         run: |
