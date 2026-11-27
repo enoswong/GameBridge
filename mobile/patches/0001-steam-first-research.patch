@@ -17,7 +17,7 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
              .navigationBarTitleDisplayMode(.inline)
              .toolbarBackground(.regularMaterial, for: .navigationBar)
              // The library keeps a material bar only before iOS 26. From iOS 26 the
-@@ -1399,12 +1398,211 @@
+@@ -1399,12 +1398,237 @@
              }
              // A Home Screen shortcut (madeira://play?exe=...) starts its library entry,
              // now or, from a cold start, once the library is up.
@@ -36,6 +36,7 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +    @State private var gameBridgePreparing = false
 +    @State private var gameBridgeAuditMessage = ""
 +    @State private var gameBridgeStage = "Ready to check"
++    @State private var gameBridgeSupportStatus = ""
 +    @AppStorage("GameBridge.lastSteamHealth") private var gameBridgeLastSteamHealth = ""
 +    @AppStorage("GameBridge.autoPrepareVC") private var gameBridgeAutoPrepareVC = false
 +    // GameBridge research: use the existing in-process Wine desktop session, not Dock.
@@ -72,6 +73,14 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +                if let error = library.error {
 +                    Text(error).foregroundStyle(.secondary).textSelection(.enabled)
 +                }
++                Button("Check GitHub support updates") {
++                    gameBridgeCheckSupport()
++                }
++                .buttonStyle(.bordered)
++                .disabled(gameBridgePreparing || library.startingJIT != nil || library.launching)
++                if !gameBridgeSupportStatus.isEmpty {
++                    Text(gameBridgeSupportStatus).font(.caption).textSelection(.enabled)
++                }
 +                Button("Enable JIT") { enableJIT() }
 +                    .buttonStyle(.bordered)
 +                    .disabled(gameBridgePreparing || library.startingJIT != nil || jitStatus == .testing)
@@ -93,6 +102,23 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +            .padding(24)
 +            .frame(maxWidth: 480)
 +            .frame(maxWidth: .infinity)
++        }
++    }
++
++    private func gameBridgeCheckSupport() {
++        guard !gameBridgePreparing, library.current == nil, library.startingJIT == nil,
++              !library.launching, wine_process_is_running() == 0, wineserver_is_running() == 0 else { return }
++        gameBridgePreparing = true
++        gameBridgeStage = "Checking signed GitHub support catalog…"
++        Task { @MainActor in
++            defer { gameBridgePreparing = false }
++            do {
++                gameBridgeSupportStatus = try await SteamRuntimeInstaller.shared.checkDesktopSupport()
++                gameBridgeStage = "Support check complete"
++            } catch {
++                gameBridgeSupportStatus = "Support catalog unavailable or invalid; existing client files unchanged."
++                gameBridgeStage = "Support check incomplete"
++            }
 +        }
 +    }
 +
