@@ -186,7 +186,7 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +    /// UserDefaults is outside the guest Documents directory; no automatic upload.
 +    private func gameBridgeRecordSteamHealth(phase: String) {
 +        guard let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
-+        let drive = documents.appendingPathComponent("wine/drive_c")
++        let drive = documents.appendingPathComponent("wine/drive_c").resolvingSymlinksInPath()
 +        let base = "Program Files/Steam Big Picture/"
 +        let modules = ["steam.exe", "bin/vgui2_s.dll", "win64/vgui2_s.dll",
 +                       "steamclient.dll", "steamclient64.dll", "steamui.dll",
