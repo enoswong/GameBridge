@@ -51,7 +51,7 @@ if [[ "$research_ui" == 1 ]]; then
         git -C "$workspace" apply "${patches[@]}"
     fi
     GIT_INDEX_FILE="$index" git -C "$workspace" diff --quiet --ignore-submodules=all --
-    for name in RuntimeDependencyPolicy PortableWindowsImportReader PortableLegacyGameAudit SteamDirectoryAudit; do
+    for name in RuntimeDependencyPolicy PortableWindowsImportReader PortableLegacyGameAudit SteamDirectoryAudit MobileSupportCatalog; do
         cmp "$root/WhiskyKit/Sources/GameBridgeCore/$name.swift" "$workspace/app/Madeira/$name.swift"
     done
 else
