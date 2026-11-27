@@ -194,7 +194,16 @@ jobs:
           cp "$project/app/Madeira.xcodeproj/project.pbxproj" "$RUNNER_TEMP/support-v1-project.pbxproj"
           bash scripts/update-existing-iphone-project.sh --check "$project" support-v1
           bash scripts/update-existing-iphone-project.sh --apply "$project" support-v1
-          cmp "$project/app/Madeira.xcodeproj/project.pbxproj" "$RUNNER_TEMP/support-v1-project.pbxproj"
+          # The only intended project change is the bundled probe resource.
+          python3 - "$project/app/Madeira.xcodeproj/project.pbxproj" "$RUNNER_TEMP/support-v1-project.pbxproj" <<'PY'
+          import pathlib, sys
+          updated, previous = [pathlib.Path(p).read_text() for p in sys.argv[1:]]
+          lines = updated.splitlines(keepends=True)
+          resource_lines = [line for line in lines if "gamebridge-probes" in line]
+          assert len(resource_lines) == 4, resource_lines
+          assert "".join(line for line in lines if "gamebridge-probes" not in line) == previous
+          PY
+          cmp "$project/app/Madeira/ContentView.swift" "$RUNNER_TEMP/madeira-ios/app/Madeira/ContentView.swift"
           grep -q 'fixture engine cache' "$project/engine-sentinel"
           cmp "$RUNNER_TEMP/madeira-ios/app/Madeira/SteamRuntime.swift" "$project/app/Madeira/SteamRuntime.swift"
           cmp "$RUNNER_TEMP/madeira-ios/app/Madeira/Info.plist" "$project/app/Madeira/Info.plist"
