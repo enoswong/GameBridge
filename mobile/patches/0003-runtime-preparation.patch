@@ -66,7 +66,7 @@ diff --git a/app/Madeira/VCRedist.swift b/app/Madeira/VCRedist.swift
 diff --git a/app/Madeira.xcodeproj/project.pbxproj b/app/Madeira.xcodeproj/project.pbxproj
 --- a/app/Madeira.xcodeproj/project.pbxproj
 +++ b/app/Madeira.xcodeproj/project.pbxproj
-@@ -84,6 +84,10 @@
+@@ -84,6 +84,11 @@
  		A100060D /* SwiftSteam/Library/SteamLibraryFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200060D /* SteamLibraryFetcher.swift */; };
  		A1000522 /* SteamKeyValues.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000522 /* SteamKeyValues.swift */; };
  		A1000523 /* SteamRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000523 /* SteamRuntime.swift */; };
@@ -74,10 +74,11 @@ diff --git a/app/Madeira.xcodeproj/project.pbxproj b/app/Madeira.xcodeproj/proje
 +		AB010002 /* PortableWindowsImportReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB020002 /* PortableWindowsImportReader.swift */; };
 +		AB010003 /* PortableLegacyGameAudit.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB020003 /* PortableLegacyGameAudit.swift */; };
 +		AB010004 /* SteamDirectoryAudit.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB020004 /* SteamDirectoryAudit.swift */; };
++		AB010005 /* MobileSupportCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB020005 /* MobileSupportCatalog.swift */; };
  		A1000524 /* DockInstallers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000524 /* DockInstallers.swift */; };
  		A1000542 /* DockStartProgram.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000542 /* DockStartProgram.swift */; };
  		A1000913 /* DockReset.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000913 /* DockReset.swift */; };
-@@ -367,6 +371,10 @@
+@@ -367,6 +372,11 @@
  		A200060D /* SteamLibraryFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SwiftSteam/Library/SteamLibraryFetcher.swift"; sourceTree = "<group>"; };
  		A2000522 /* SteamKeyValues.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SteamKeyValues.swift"; sourceTree = "<group>"; };
  		A2000523 /* SteamRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SteamRuntime.swift"; sourceTree = "<group>"; };
@@ -85,10 +86,11 @@ diff --git a/app/Madeira.xcodeproj/project.pbxproj b/app/Madeira.xcodeproj/proje
 +		AB020002 /* PortableWindowsImportReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PortableWindowsImportReader.swift"; sourceTree = "<group>"; };
 +		AB020003 /* PortableLegacyGameAudit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PortableLegacyGameAudit.swift"; sourceTree = "<group>"; };
 +		AB020004 /* SteamDirectoryAudit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SteamDirectoryAudit.swift"; sourceTree = "<group>"; };
++		AB020005 /* MobileSupportCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MobileSupportCatalog.swift"; sourceTree = "<group>"; };
  		A2000524 /* DockInstallers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DockInstallers.swift"; sourceTree = "<group>"; };
  		A2000542 /* DockStartProgram.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DockStartProgram.swift"; sourceTree = "<group>"; };
  		A2000913 /* DockReset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockReset.swift; sourceTree = "<group>"; };
-@@ -695,6 +703,10 @@
+@@ -695,6 +705,11 @@
  				A200060D /* SteamLibraryFetcher.swift */,
  				A2000522 /* SteamKeyValues.swift */,
  				A2000523 /* SteamRuntime.swift */,
@@ -96,10 +98,11 @@ diff --git a/app/Madeira.xcodeproj/project.pbxproj b/app/Madeira.xcodeproj/proje
 +				AB020002 /* PortableWindowsImportReader.swift */,
 +				AB020003 /* PortableLegacyGameAudit.swift */,
 +				AB020004 /* SteamDirectoryAudit.swift */,
++				AB020005 /* MobileSupportCatalog.swift */,
  				A2000524 /* DockInstallers.swift */,
  				A2000542 /* DockStartProgram.swift */,
  				A2000913 /* DockReset.swift */,
-@@ -1160,6 +1172,10 @@
+@@ -1160,6 +1175,11 @@
  				A100060D /* SwiftSteam/Library/SteamLibraryFetcher.swift in Sources */,
  				A1000522 /* SteamKeyValues.swift in Sources */,
  				A1000523 /* SteamRuntime.swift in Sources */,
@@ -107,6 +110,7 @@ diff --git a/app/Madeira.xcodeproj/project.pbxproj b/app/Madeira.xcodeproj/proje
 +				AB010002 /* PortableWindowsImportReader.swift in Sources */,
 +				AB010003 /* PortableLegacyGameAudit.swift in Sources */,
 +				AB010004 /* SteamDirectoryAudit.swift in Sources */,
++				AB010005 /* MobileSupportCatalog.swift in Sources */,
  				A1000524 /* DockInstallers.swift in Sources */,
  				A1000542 /* DockStartProgram.swift in Sources */,
  				A1000913 /* DockReset.swift in Sources */,
@@ -488,3 +492,101 @@ new file mode 100644
 +                    failedDirectories: failures)
 +    }
 +}
+diff --git a/app/Madeira/MobileSupportCatalog.swift b/app/Madeira/MobileSupportCatalog.swift
+new file mode 100644
+--- /dev/null
++++ b/app/Madeira/MobileSupportCatalog.swift
+@@ -0,0 +1,93 @@
++// SPDX-License-Identifier: GPL-3.0-or-later
++import Foundation
++#if canImport(CryptoKit)
++import CryptoKit
++
++/// A remote data-only catalog for one coherent official Valve desktop seed.
++public enum MobileSupportCatalog {
++    public struct Package: Codable, Equatable, Sendable {
++        public let file: String
++        public let bytes: Int
++        public let sha256: String
++        public init(file: String, bytes: Int, sha256: String) {
++            self.file = file
++            self.bytes = bytes
++            self.sha256 = sha256
++        }
++    }
++
++    public struct Payload: Codable, Sendable {
++        public let schemaVersion: Int
++        public let revision: Int
++        public let issuedAt: Int
++        public let expiresAt: Int
++        public let packages: [Package]
++        public let clientSHA256: String
++    }
++
++    public struct Envelope: Codable {
++        public let keyID: String
++        public let payload: Data
++        public let signature: Data
++    }
++
++    public struct Verified: Sendable {
++        public let payload: Payload
++        public let digest: String
++    }
++
++    public enum Failure: Error {
++        case invalidSignature, invalidCatalog, staleOrChangedRevision
++    }
++
++    public static let maxEnvelopeBytes = 64 * 1024
++    private static let expected = ["steam_win32.zip.", "bins_win32.zip.", "bins_win64_win32.zip."]
++
++    private static func hex(_ string: String, length: Int) -> Bool {
++        string.utf8.count == length && string.utf8.allSatisfy {
++            (48...57).contains($0) || (97...102).contains($0)
++        }
++    }
++
++    private static func validPackages(_ packages: [Package]) -> Bool {
++        guard packages.count == expected.count else { return false }
++        return expected.allSatisfy { prefix in
++            packages.filter { package in
++                package.file.hasPrefix(prefix)
++                && hex(String(package.file.dropFirst(prefix.count)), length: 40)
++                && (1...64 * 1024 * 1024).contains(package.bytes)
++                && hex(package.sha256, length: 64)
++            }.count == 1
++        }
++    }
++
++    /// The trust key is supplied by the installed native app, never by the network response.
++    public static func verify(
++        _ data: Data, keyID: String, publicKey: Data, now: Int,
++        minimumRevision: Int = 0, acceptedDigest: String? = nil
++    ) throws -> Verified {
++        guard !data.isEmpty, data.count <= maxEnvelopeBytes, now > 0 else {
++            throw Failure.invalidCatalog
++        }
++        let envelope = try JSONDecoder().decode(Envelope.self, from: data)
++        let key = try Curve25519.Signing.PublicKey(rawRepresentation: publicKey)
++        guard envelope.keyID == keyID, envelope.signature.count == 64,
++              key.isValidSignature(envelope.signature, for: envelope.payload) else {
++            throw Failure.invalidSignature
++        }
++        let payload = try JSONDecoder().decode(Payload.self, from: envelope.payload)
++        guard payload.schemaVersion == 1, payload.revision > 0,
++              payload.issuedAt > 0, payload.issuedAt <= now,
++              payload.expiresAt > now, payload.expiresAt - payload.issuedAt <= 31 * 86400,
++              validPackages(payload.packages), hex(payload.clientSHA256, length: 64) else {
++            throw Failure.invalidCatalog
++        }
++        let digest = SHA256.hash(data: envelope.payload).map { String(format: "%02x", $0) }.joined()
++        guard payload.revision >= minimumRevision,
++              payload.revision != minimumRevision || acceptedDigest == digest else {
++            throw Failure.staleOrChangedRevision
++        }
++        return Verified(payload: payload, digest: digest)
++    }
++}
++#endif
