@@ -124,6 +124,27 @@ jobs:
         run: |
           swiftc -parse-as-library WhiskyKit/Sources/GameBridgeCore/MobileSupportCatalog.swift \
             scripts/mobile-support-signer.swift -o "$RUNNER_TEMP/mobile-support-signer"
+      - name: Exercise local catalog publication without a production key
+        run: |
+          set -euo pipefail
+          bash -n scripts/init-mobile-support-channel.sh scripts/prepare-mobile-support-release.sh
+          export HOME="$RUNNER_TEMP/support-test-home"
+          mkdir -m 700 "$HOME"
+          bash scripts/init-mobile-support-channel.sh
+          out="$HOME/.gamebridge-support/release-1"
+          keyid="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["keyID"])' "$out/trust.json")"
+          pub="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["publicKey"])' "$out/trust.json")"
+          "$RUNNER_TEMP/mobile-support-signer" verify "$keyid" "$pub" "$out/steam-seed.json"
+          test "$(stat -f '%Lp' "$HOME/.gamebridge-support/ed25519.key")" = 600
+          test "$(find "$out" -type f | wc -l | tr -d ' ')" = 2
+          if bash scripts/init-mobile-support-channel.sh; then
+            echo "Initial setup must not overwrite existing release" >&2
+            exit 1
+          fi
+          if "$RUNNER_TEMP/mobile-support-signer" verify wrong-key "$pub" "$out/steam-seed.json"; then
+            echo "Incorrect trust identity was accepted" >&2
+            exit 1
+          fi
       - name: Resolve app dependencies
         run: |
           xcodebuild -resolvePackageDependencies -project Whisky.xcodeproj \
