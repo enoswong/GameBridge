@@ -6,13 +6,14 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 base=6787eca8cad63d916ffd9e989a99432da93c6064
 upstream=fbad430410b4075192166172447c859714726de9
 [[ ( $# == 2 || $# == 3 ) && ( "$1" == --check || "$1" == --apply ) ]] || {
-    echo "Usage: $0 --check|--apply EXISTING_MADEIRA_WORKSPACE [original|support-v1]" >&2
+    echo "Usage: $0 --check|--apply EXISTING_MADEIRA_WORKSPACE [original|support-v1|language-v1]" >&2
     exit 2
 }
 mode="$1"
 case "${3:-original}" in
     original) ;;
     support-v1) base=1bfd71316184ffddb23a763fdad9772e398dc988 ;;
+    language-v1) base=ec9932bc14465eafa5039641d84fd3e6eeba5681 ;;
     *) echo "Unsupported installed overlay baseline" >&2; exit 2 ;;
 esac
 if ! git -C "$root" cat-file -e "$base^{commit}"; then
