@@ -17,7 +17,7 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
              .navigationBarTitleDisplayMode(.inline)
              .toolbarBackground(.regularMaterial, for: .navigationBar)
              // The library keeps a material bar only before iOS 26. From iOS 26 the
-@@ -1399,12 +1398,237 @@
+@@ -1399,12 +1398,246 @@
              }
              // A Home Screen shortcut (madeira://play?exe=...) starts its library entry,
              // now or, from a cold start, once the library is up.
@@ -73,6 +73,11 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +                if let error = library.error {
 +                    Text(error).foregroundStyle(.secondary).textSelection(.enabled)
 +                }
++                Button("Prepare / repair Steam") {
++                    gameBridgeOpenSteam(launch: false)
++                }
++                .buttonStyle(.bordered)
++                .disabled(gameBridgePreparing || library.startingJIT != nil || library.launching)
 +                Button("Check GitHub support updates") {
 +                    gameBridgeCheckSupport()
 +                }
@@ -122,7 +127,7 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +        }
 +    }
 +
-+    private func gameBridgeOpenSteam() {
++    private func gameBridgeOpenSteam(launch: Bool = true) {
 +        guard !gameBridgePreparing, library.current == nil, library.startingJIT == nil,
 +              !library.launching, !VCRedistModel.shared.busy,
 +              wine_process_is_running() == 0, wineserver_is_running() == 0 else { return }
@@ -161,8 +166,12 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +                }
 +                guard library.current == nil, wine_process_is_running() == 0,
 +                      wineserver_is_running() == 0 else { throw SteamRuntimeFiles.Failure.activeSession }
-+                gameBridgeStage = "Requesting local Windows Steam session"
-+                launchLibraryEntry(.bigPictureEntry)
++                if launch {
++                    gameBridgeStage = "Requesting local Windows Steam session"
++                    launchLibraryEntry(.bigPictureEntry)
++                } else {
++                    gameBridgeStage = "Component preparation complete; Steam not started"
++                }
 +            } catch {
 +                gameBridgeStage = "Preparation incomplete"
 +                gameBridgeRecordSteamHealth(phase: "preparation-failed")
