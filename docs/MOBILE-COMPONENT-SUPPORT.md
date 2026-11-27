@@ -49,11 +49,19 @@ For each subsequent release, use the reviewed payload with a higher revision and
 
 Publish both public JSON files together to the support-catalog branch, preferably through a PR with the validation check passing. A 30-day renewal requires the maintainer's offline signature even when package pins remain unchanged. Do not rotate trust on this branch alone. The workflow detects invalid/deleted metadata, unchanged-revision content changes and trust replacement relative to the previous commit. This does not automate discovering newer official packages or certify their runtime compatibility.
 
+## iPhone update and repair controls
+
+The research home now has separate **Check GitHub support updates** and **Prepare / repair Steam** buttons. The former forces a signed metadata refresh and displays the verified revision (network or valid cache); it never changes guest files. The latter runs the normal preparation path without launching Wine or requesting JIT. An intact supported client checks for updates before launch using a 24-hour successful-verification cache; a missing or interrupted installation forces a new check. An unavailable catalog cannot stop an otherwise intact client from attempting its normal launch. Repair still refuses mixed-version replacement.
+
+Minimum PE presence checks now distinguish the known x86 desktop layout from the x64 layout. An x64 GUI DLL does not satisfy a missing x86 GUI DLL. The x86 seed checks Steam executable, GUI, client, SteamUI and filesystem architecture. These are limited known layouts, not proof that new Steam releases or transitive dependencies can load. Complete native and physical-device acceptance remain required.
+
 ## Reporting and triage
 
 Before preparation, after preparation/failure and when a session ends, store a small known-module PE status report locally. The Wine log hook additionally collects bounded, deduplicated module-not-found/load-failed DLL basenames, even when live log display is suppressed. It does not capture raw paths, Steam passwords, account identifiers, tokens, pairing files or full logs. Not every graphical fatal dialog emits a parsable log; static presence cannot prove the runtime loader can load a file.
 
 The diagnostics disclosure exposes the local report and a GitHub issue link with the module status and failure codes prefilled. The user explicitly reviews and submits the issue; no automatic network telemetry, service credentials or private report endpoint is configured. GitHub issues may be public. Maintainers triage missing versus load-failed, reproduce, identify an official supported package, verify it, sign a new coherent catalog revision and publish the envelope. Do not automatically approve unknown modules based on a report.
+
+A proposed SupportIssueTriage workflow on the development branch assigns a fixed set of labels (iOS, component-report, missing-module, loader-failure, Steam client, needs-triage) to matching newly opened or reopened issues. Issue content is untrusted; no shell execution, automatic binary selection or publication. The GitHub issues event requires this workflow on the default branch before it operates. It has not been merged or tested on a live user issue. Repository Watch notifications remain the manual monitoring option.
 
 Future optional automatic reporting must be consent-based, bounded, rate-limited, redacted, and use a separate authenticated ingestion service and retention policy; app errors must not depend on that service. Current reporting is local plus explicit user submission only.
 
