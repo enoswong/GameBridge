@@ -55,6 +55,26 @@ The research home now has separate **Check GitHub support updates** and **Prepar
 
 Minimum PE presence checks now distinguish the known x86 desktop layout from the x64 layout. An x64 GUI DLL does not satisfy a missing x86 GUI DLL. The x86 seed checks Steam executable, GUI, client, SteamUI and filesystem architecture. These are limited known layouts, not proof that new Steam releases or transitive dependencies can load. Complete native and physical-device acceptance remain required.
 
+## Existing physical research installation
+
+A separate maintainer-side repair tool can inspect a local copy of the stopped device's isolated Steam Big Picture folder. Copy only that folder locally using Files/Finder file sharing (do not upload it; it may contain account data). Run:
+
+    python3 scripts/prepare-iphone-steam-repair.py \
+      --client-dir "/path/to/copied/Steam Big Picture" \
+      --output "$HOME/Desktop/GameBridge-missing-only"
+
+It downloads the three fixed official archive pins, validates size/hash, safe archive paths, cohort identity and architecture, compares all existing matching cohort files, and exports only absent files. It never changes the copied client or the phone. Import only the missing files to the original matching stopped installation, preserving relative paths; do not replace existing files or import if the device changed since the snapshot. A version conflict stops the process. A present DLL that still cannot load requires further dependency diagnostics; the tool cannot prove Steam login. The output contains Valve binaries for local use, not redistribution.
+
+The original iPhone project from revision 6787eca may also be updated without rebuilding the pinned native engines. From a separate current development checkout:
+
+    bash scripts/update-existing-iphone-project.sh --check "/absolute/path/to/original/madeira-workspace"
+
+Close Xcode before applying. Only if the check passes:
+
+    bash scripts/update-existing-iphone-project.sh --apply "/absolute/path/to/original/madeira-workspace"
+
+The helper computes the exact old-to-new overlay delta against the pinned upstream commit, accepts only reviewed app Swift/plist/project-file additions or modifications, checks patch context, and backs up changed files before applying. It refuses conflicts; it does not reset, overwrite signing entitlements or rebuild native artifacts. Xcode still needs to compile/re-sign/install the updated app, retaining its original identity. Use the usual full isolated build for any future native engine change. The migrated original workspace is not a clean checkout accepted by the full preparation script. A CI fixture tests preservation of simulated Team and engine-cache changes; actual local Xcode changes may differ.
+
 ## Reporting and triage
 
 Before preparation, after preparation/failure and when a session ends, store a small known-module PE status report locally. The Wine log hook additionally collects bounded, deduplicated module-not-found/load-failed DLL basenames, even when live log display is suppressed. It does not capture raw paths, Steam passwords, account identifiers, tokens, pairing files or full logs. Not every graphical fatal dialog emits a parsable log; static presence cannot prove the runtime loader can load a file.
