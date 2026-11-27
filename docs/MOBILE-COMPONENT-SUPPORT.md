@@ -1,6 +1,6 @@
 # GameBridge mobile component support
 
-Status: research. Maintainer public trust received and verified, initial signed catalog publication PR #4 pending validation/merge. No production iPhone acceptance yet.
+Status: research. Maintainer public trust received and verified; initial signed catalog PR #4 passed catalog publication validation and merged to support-catalog. No production iPhone acceptance yet.
 
 ## Independent release boundaries
 
@@ -49,7 +49,7 @@ For each subsequent release, use the reviewed payload with a higher revision and
 
 Publish both public JSON files together to the support-catalog branch, preferably through a PR with the validation check passing. A 30-day renewal requires the maintainer's offline signature even when package pins remain unchanged. Do not rotate trust on this branch alone. The workflow detects invalid/deleted metadata, unchanged-revision content changes and trust replacement relative to the previous commit. This does not automate discovering newer official packages or certify their runtime compatibility.
 
-The repository is public and its default branch is main (verified through repository metadata). Apps do not need a GitHub token to fetch the signed raw catalog. The initial public trust and signed revision 1 are prepared in PR #4. The support-catalog branch becomes active only when publication is validated and merged.
+The repository is public and its default branch is main (verified through repository metadata). Apps do not need a GitHub token to fetch the signed raw catalog. The initial public trust and signed revision 1 are published on support-catalog (PR #4, merge d7fd1150ba2d22f8067e8605d4ff265990eff212).
 
 To create an atomic review branch containing both public files from the maintainer's existing Git login:
 
@@ -103,7 +103,7 @@ After generating the initial signed release locally and updating the original Xc
     bash scripts/configure-iphone-support-trust.sh --check "/path/to/original/madeira-workspace" "$HOME/.gamebridge-support/release-1"
     bash scripts/configure-iphone-support-trust.sh --apply "/path/to/original/madeira-workspace" "$HOME/.gamebridge-support/release-1"
 
-Close Xcode before applying. The tool verifies public-key identity and the signed envelope, embeds only two public values in the research Info.plist, and preserves the original file in a local backup. It refuses an absent overlay or different embedded key. It reads no private key and changes no signing entitlements, project settings or native runtime artifacts. Rebuild and sign the app once using the existing device setup. This local plist edit must be preserved in future source migrations. The support-catalog branch still needs both public JSON files published; merely embedding a key does not activate the remote channel.
+Close Xcode before applying. The tool verifies public-key identity and the signed envelope, embeds only two public values in the research Info.plist, and preserves the original file in a local backup. It refuses an absent overlay or different embedded key. It reads no private key and changes no signing entitlements, project settings or native runtime artifacts. Rebuild and sign the app once using the existing device setup. This local plist edit must be preserved in future source migrations. The initial public JSON files have now been published in PR #4. Existing installed apps still require the source update and re-signing.
 
 A separate operations-only PR #3 proposes default-branch monitoring and issue triage without merging native source or distributing any binaries. It pins the verifier and compares the published trust against the maintainer public trust recorded in the development source. No merge or live issue/scheduled-job execution is claimed.
 
@@ -123,4 +123,4 @@ iPhone 17 / iOS 27.3 displayed the Wine desktop and Valve's Steam fatal dialog f
 
 ## Initial maintainer trust
 
-Revision 1, key ID `98c7f873c4973474`, was independently verified using Ed25519 against the supplied public key. The signed payload uses the same three official Steam archives as the reviewed seed, issued 2026-11-27 10:35:34 UTC, expiring 2026-12-27 10:36:34 UTC. Public metadata only is in PR #4. The original signed payload and signature are unchanged (JSON envelope whitespace may differ). The next iPhone build contains the public anchor; no private signing key was received or published. The full native build at b373669 remains evidence for the earlier overlay, not a native build of the new embedded key.
+Revision 1, key ID `98c7f873c4973474`, was independently verified using Ed25519 against the supplied public key. The signed payload uses the same three official Steam archives as the reviewed seed, issued 2026-11-27 10:35:34 UTC, expiring 2026-12-27 10:36:34 UTC. Public metadata only was published in PR #4. Catalog publication validation run 45984528454 passed; inherited baseline SwiftLint still reported 325 violations in 91 unchanged Swift files, which were not altered or suppressed for this data-only merge. The original signed payload and signature are unchanged (JSON envelope whitespace may differ). The next iPhone build contains the public anchor; no private signing key was received or published. The full native build at b373669 remains evidence for the earlier overlay, not a native build of the new embedded key.
