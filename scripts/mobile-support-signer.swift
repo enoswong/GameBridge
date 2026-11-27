@@ -16,9 +16,9 @@ struct MobileCatalogSigner {
         if args.count == 2 && args[0] == "init-key" {
             let key = Curve25519.Signing.PrivateKey()
             // Exclusively create a local 0600 key; never overwrite or follow a link.
-            let fd = Darwin.open(args[1], O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
-            guard fd >= 0 else { throw CocoaError(.fileWriteFileExists) }
-            let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+            let descriptor = Darwin.open(args[1], O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
+            guard descriptor >= 0 else { throw CocoaError(.fileWriteFileExists) }
+            let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
             try handle.write(contentsOf: key.rawRepresentation)
             try handle.synchronize()
             try handle.close()
