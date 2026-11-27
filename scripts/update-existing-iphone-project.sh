@@ -5,11 +5,20 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 base=6787eca8cad63d916ffd9e989a99432da93c6064
 upstream=fbad430410b4075192166172447c859714726de9
-[[ $# == 2 && ( "$1" == --check || "$1" == --apply ) ]] || {
-    echo "Usage: $0 --check|--apply EXISTING_MADEIRA_WORKSPACE" >&2
+[[ ( $# == 2 || $# == 3 ) && ( "$1" == --check || "$1" == --apply ) ]] || {
+    echo "Usage: $0 --check|--apply EXISTING_MADEIRA_WORKSPACE [original|support-v1]" >&2
     exit 2
 }
 mode="$1"
+case "${3:-original}" in
+    original) ;;
+    support-v1) base=1bfd71316184ffddb23a763fdad9772e398dc988 ;;
+    *) echo "Unsupported installed overlay baseline" >&2; exit 2 ;;
+esac
+if ! git -C "$root" cat-file -e "$base^{commit}"; then
+    echo "Missing source baseline $base; fetch the development branch history first." >&2
+    exit 1
+fi
 workspace="$(cd "$2" && pwd -P)"
 [[ "$(git -C "$workspace" rev-parse HEAD)" == "$upstream" ]]
 [[ "$(git -C "$workspace" remote get-url origin)" == https://github.com/willfaust/Madeira.git ]]
