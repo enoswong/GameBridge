@@ -1,0 +1,88 @@
+name: Monitor GameBridge support channel
+on:
+  schedule:
+    - cron: '20 2 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: gamebridge-support-monitor
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 0e28d974c86e743cadcbbf4c3c96773630e33b96
+          path: verifier
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: support-catalog
+          path: published
+          persist-credentials: false
+      - name: Verify signed channel and renewal window
+        id: health
+        run: |
+          set -euo pipefail
+          if [[ ! -e published/mobile/steam-seed.json && ! -e published/mobile/trust.json ]]; then
+            echo "Support channel is not activated."
+            echo "state=not-activated" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          test -f published/mobile/steam-seed.json
+          test -f published/mobile/trust.json
+          test ! -L published/mobile/steam-seed.json
+          test ! -L published/mobile/trust.json
+          swiftc -parse-as-library verifier/WhiskyKit/Sources/GameBridgeCore/MobileSupportCatalog.swift \
+            verifier/scripts/mobile-support-signer.swift -o "$RUNNER_TEMP/support-signer"
+          keyid="$(python3 -c 'import json; print(json.load(open("published/mobile/trust.json"))["keyID"])')"
+          pub="$(python3 -c 'import json; print(json.load(open("published/mobile/trust.json"))["publicKey"])')"
+          "$RUNNER_TEMP/support-signer" verify "$keyid" "$pub" published/mobile/steam-seed.json
+          python3 - <<'PY'
+          import base64, json, os, pathlib, time
+          payload = base64.b64decode(json.loads(pathlib.Path("published/mobile/steam-seed.json").read_bytes())["payload"], validate=True)
+          metadata = json.loads(payload)
+          pathlib.Path(os.environ["RUNNER_TEMP"], "support-payload.json").write_bytes(payload)
+          remaining = metadata["expiresAt"] - int(time.time())
+          print("Verified revision:", metadata["revision"], "; seconds until expiry:", remaining)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              print("state=" + ("renewal-due" if remaining <= 7 * 86400 else "healthy"), file=out)
+          PY
+      - name: Verify official package availability and content
+        if: steps.health.outputs.state == 'healthy' || steps.health.outputs.state == 'renewal-due'
+        run: python3 verifier/scripts/diagnose-mobile-steam.py --catalog-payload "$RUNNER_TEMP/support-payload.json"
+      - name: Open or resolve one maintainer alert
+        if: always() && !cancelled()
+        uses: actions/github-script@v7
+        env:
+          STATE: ${{ steps.health.outputs.state }}
+          JOB_STATUS: ${{ job.status }}
+        with:
+          script: |
+            // Fixed issue title; no remote data is executed or copied into an issue.
+            const title = "[GameBridge support monitor] Catalog health";
+            const failed = process.env.JOB_STATUS === "failure";
+            const state = process.env.STATE || "unknown";
+            const alert = failed || state === "renewal-due";
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              ...context.repo, state: "open", creator: "github-actions[bot]", per_page: 100
+            });
+            const issue = issues.find(x => x.title === title && !x.pull_request);
+            const url = context.serverUrl + "/" + context.repo.owner + "/" + context.repo.repo + "/actions/runs/" + context.runId;
+            if (alert) {
+              const body = (failed ? "Catalog or official package verification failed." : "Verified catalog expires within seven days.") +
+                "\n\nReview the Actions run: " + url +
+                "\n\nDo not automatically publish replacement packages. The maintainer must review and sign a new revision.";
+              if (issue) {
+                await github.rest.issues.update({ ...context.repo, issue_number: issue.number, body });
+              } else {
+                await github.rest.issues.create({ ...context.repo, title, body });
+              }
+            } else if (issue && state === "healthy") {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: issue.number, body: "Catalog health verified again: " + url });
+              await github.rest.issues.update({ ...context.repo, issue_number: issue.number, state: "closed" });
+            }
