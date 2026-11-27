@@ -295,7 +295,7 @@ diff --git a/app/Madeira/Library.swift b/app/Madeira/Library.swift
          entry.id = bigPictureID; entry.bigPicture = true; entry.graphicsAPI = "Steam"; entry.launchMode = "desktop"
          return entry
      }
-@@ -626,64 +619,41 @@
+@@ -626,64 +619,43 @@
      var listedInLibrary: Bool { bigPicture != true || Self.bigPictureShown }
      /// The button is offered when Big Picture's folder has a client, or the Dock's steam.exe
      /// can seed one.
@@ -371,12 +371,14 @@ diff --git a/app/Madeira/Library.swift b/app/Madeira/Library.swift
 +        }
 +        // The research desktop uses a separate client, not the pinned Dock install.
 +        // Do not disable Chromium sandboxing or prevent Steam security updates.
++        let gpu = MadeiraConfig.flag("MADEIRA_BIG_PICTURE_GPU", fallback: false)
++        LogStore.shared.log("[gamebridge-steam] CEF GPU acceleration requested=\(gpu ? 1 : 0)")
 +        let bat = [
 +            "@echo off",
 +            "rem GameBridge desktop Steam research",
 +            "start \"\" \"C:\\windows\\system32\\services.exe\"",
 +            "cd /d \"\(folder.windows)\"",
-+            "\"\(folder.windows)\\steam.exe\" -cef-disable-gpu",
++            "\"\(folder.windows)\\steam.exe\"" + (gpu ? "" : " -cef-disable-gpu"),
 +        ].joined(separator: "\r\n") + "\r\n"
 +        let path = documents.appendingPathComponent("wine/drive_c/big-picture.bat")
 +        do {
