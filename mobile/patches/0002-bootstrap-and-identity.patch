@@ -190,7 +190,7 @@ diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
 diff --git a/app/Madeira/Info.plist b/app/Madeira/Info.plist
 --- a/app/Madeira/Info.plist
 +++ b/app/Madeira/Info.plist
-@@ -15,8 +15,8 @@
+@@ -15,8 +15,12 @@
  	<true/>
  	<key>CFBundleDevelopmentRegion</key>
  	<string>en</string>
@@ -198,10 +198,14 @@ diff --git a/app/Madeira/Info.plist b/app/Madeira/Info.plist
 -	<string>Madeira</string>
 +	<key>CFBundleDisplayName</key>
 +	<string>GameBridge Research</string>
++	<key>GameBridgeSupportKeyID</key>
++	<string>$(GAMEBRIDGE_SUPPORT_KEY_ID)</string>
++	<key>GameBridgeSupportPublicKey</key>
++	<string>$(GAMEBRIDGE_SUPPORT_PUBLIC_KEY)</string>
  	<key>CFBundleDocumentTypes</key>
  	<array>
  		<dict>
-@@ -51,7 +51,7 @@
+@@ -51,7 +55,7 @@
  			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
  			<key>CFBundleURLSchemes</key>
  			<array>
