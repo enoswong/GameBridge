@@ -50,7 +50,7 @@ diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
 +            MobileSupportCatalog.Package(file: $0.file, bytes: $0.bytes, sha256: $0.sha256)
 +        }
 +        let clientHash = catalog?.clientSHA256 ?? SteamRuntimeFiles.clientSHA256
-+        let stage = fm.temporaryDirectory.appendingPathComponent("gamebridge-steam-" + UUID().uuidString)
++        let stage = fm.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent("gamebridge-steam-" + UUID().uuidString)
 +        try fm.createDirectory(at: stage, withIntermediateDirectories: false)
 +        defer { try? fm.removeItem(at: stage) }
 +        let configuration = URLSessionConfiguration.ephemeral
@@ -128,7 +128,7 @@ diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
 +        let info = Bundle.main
 +        let keyID = info.object(forInfoDictionaryKey: "GameBridgeSupportKeyID") as? String ?? ""
 +        let encodedKey = info.object(forInfoDictionaryKey: "GameBridgeSupportPublicKey") as? String ?? ""
-+        if keyID.isEmpty && encodedKey.isEmpty { return nil }
++        if (keyID.isEmpty || keyID == "$(GAMEBRIDGE_SUPPORT_KEY_ID)") && (encodedKey.isEmpty || encodedKey == "$(GAMEBRIDGE_SUPPORT_PUBLIC_KEY)") { return nil }
 +        guard !keyID.isEmpty, keyID.utf8.count <= 64,
 +              let publicKey = Data(base64Encoded: encodedKey), publicKey.count == 32 else {
 +            throw SteamRuntimeFiles.Failure.invalidPackage
