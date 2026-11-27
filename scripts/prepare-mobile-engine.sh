@@ -88,6 +88,10 @@ if [[ "$mode" == *build ]]; then
     fi
     command -v 7zz >/dev/null || brew install sevenzip
     ROOT="$workspace" VC_REDIST_X64="$vc_input" bash "$workspace/tools/build/prepare-vcruntime.sh"
+    # Fix the pinned Wine OpenGL WoW64 host-pointer conversion before native compilation.
+    if [[ "$research_ui" == 1 ]]; then
+        bash "$root/scripts/fix-iphone-wow64-opengl.sh" --apply "$workspace"
+    fi
     printf 'Building mobile research IPA (not a GameBridge release).\n'
     # The upstream CI path assumes separate native/i386 cache jobs. Run the full
     # local-source path on our isolated runner instead, including i386.
