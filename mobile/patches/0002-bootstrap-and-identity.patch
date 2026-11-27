@@ -1,7 +1,7 @@
 diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
 --- a/app/Madeira/SteamRuntime.swift
 +++ b/app/Madeira/SteamRuntime.swift
-@@ -325,6 +325,217 @@
+@@ -325,6 +325,248 @@
          await progress("Steam components are ready.")
      }
  
@@ -75,15 +75,7 @@ diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
 +            guard let url = URL(string: SteamRuntimeFiles.origin + package.file) else {
 +                throw SteamRuntimeFiles.Failure.invalidPackage
 +            }
-+            let (temporary, response) = try await session.download(from: url)
-+            defer { try? fm.removeItem(at: temporary) }
-+            guard let http = response as? HTTPURLResponse, http.statusCode == 200,
-+                  http.url?.host == url.host, http.url?.scheme == "https",
-+                  (try temporary.resourceValues(forKeys: [.fileSizeKey])).fileSize == package.bytes else {
-+                throw SteamRuntimeFiles.Failure.invalidPackage
-+            }
-+            let archive = try Data(contentsOf: temporary, options: .mappedIfSafe)
-+            guard Self.hash(archive) == package.sha256 else { throw SteamRuntimeFiles.Failure.invalidPackage }
++            let archive = try await Self.downloadDesktopArchive(package, url: url, session: session)
 +            try SteamRuntimeFiles.unpack(archive) { name, bytes in
 +                guard names.insert(name.lowercased()).inserted else { throw SteamRuntimeFiles.Failure.invalidPackage }
 +                let file = try SteamRuntimeFiles.destination(name, under: stage)
@@ -134,6 +126,45 @@ diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
 +            try fm.moveItem(at: temp, to: destination)
 +        }
 +        UserDefaults.standard.removeObject(forKey: pendingKey)
++    }
++
++    /// Bound retries to transient HTTP or transport failures. Integrity failures never retry.
++    private static func downloadDesktopArchive(
++        _ package: MobileSupportCatalog.Package, url: URL, session: URLSession
++    ) async throws -> Data {
++        let fm = FileManager.default
++        let transientStatuses: Set<Int> = [408, 429, 500, 502, 503, 504]
++        let transientErrors: Set<URLError.Code> = [
++            .timedOut, .cannotFindHost, .cannotConnectToHost, .networkConnectionLost,
++            .dnsLookupFailed, .notConnectedToInternet
++        ]
++        for attempt in 0..<3 {
++            try Task.checkCancellation()
++            do {
++                let (temporary, response) = try await session.download(from: url)
++                defer { try? fm.removeItem(at: temporary) }
++                guard let http = response as? HTTPURLResponse,
++                      http.url?.host == url.host, http.url?.scheme == "https" else {
++                    throw SteamRuntimeFiles.Failure.invalidPackage
++                }
++                if transientStatuses.contains(http.statusCode), attempt < 2 {
++                    try await Task.sleep(nanoseconds: UInt64(5 * (attempt + 1)) * 1_000_000_000)
++                    continue
++                }
++                guard http.statusCode == 200,
++                      (try temporary.resourceValues(forKeys: [.fileSizeKey])).fileSize == package.bytes else {
++                    throw SteamRuntimeFiles.Failure.invalidPackage
++                }
++                let archive = try Data(contentsOf: temporary, options: .mappedIfSafe)
++                guard Self.hash(archive) == package.sha256 else { throw SteamRuntimeFiles.Failure.invalidPackage }
++                return archive
++            } catch let error as URLError {
++                try Task.checkCancellation()
++                guard transientErrors.contains(error.code), attempt < 2 else { throw error }
++                try await Task.sleep(nanoseconds: UInt64(5 * (attempt + 1)) * 1_000_000_000)
++            }
++        }
++        throw SteamRuntimeFiles.Failure.invalidPackage
 +    }
 +
 +    /// The configured trust anchor is part of the native app signature. There is no
