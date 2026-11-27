@@ -22,6 +22,8 @@ class NativeProbeBuildTests(unittest.TestCase):
             self.assertNotIn(b'ucrtbase.dll', data.lower())
             self.assertIn(b'KERNEL32.dll', data)
             self.assertIn(b'USER32.dll', data)
+            self.assertIn('繁體中文測試'.encode('utf-16le'), data)
+            self.assertIn('简体中文测试'.encode('utf-16le'), data)
 
 if __name__ == '__main__':
     unittest.main()
