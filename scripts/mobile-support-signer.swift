@@ -26,6 +26,16 @@ struct MobileCatalogSigner {
             print("GAMEBRIDGE_SUPPORT_PUBLIC_KEY=" + key.publicKey.rawRepresentation.base64EncodedString())
             return
         }
+        if args.count == 4 && args[0] == "verify" {
+            guard let publicKey = Data(base64Encoded: args[2]), publicKey.count == 32 else {
+                throw MobileSupportCatalog.Failure.invalidCatalog
+            }
+            let data = try Data(contentsOf: URL(fileURLWithPath: args[3]))
+            let verified = try MobileSupportCatalog.verify(data, keyID: args[1], publicKey: publicKey,
+                now: Int(Date().timeIntervalSince1970))
+            print("Verified support catalog revision \(verified.payload.revision)")
+            return
+        }
         if args.count == 4 && args[0] == "sign" {
             let keyURL = URL(fileURLWithPath: args[1])
             let values = try keyURL.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
@@ -50,6 +60,7 @@ struct MobileCatalogSigner {
             return
         }
         print("Usage: mobile-support-signer init-key PRIVATE_KEY | sign PRIVATE_KEY PAYLOAD_JSON ENVELOPE_JSON")
+        print("       mobile-support-signer verify KEY_ID PUBLIC_KEY_BASE64 ENVELOPE_JSON")
         exit(2)
     }
 }
