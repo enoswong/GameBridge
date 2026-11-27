@@ -85,6 +85,19 @@ Close Xcode before applying. Only if the check passes:
 
 The helper computes the exact old-to-new overlay delta against the pinned upstream commit, accepts only reviewed app Swift/plist/project-file additions or modifications, checks patch context, and backs up changed files before applying. It refuses conflicts; it does not reset, overwrite signing entitlements or rebuild native artifacts. Xcode still needs to compile/re-sign/install the updated app, retaining its original identity. Use the usual full isolated build for any future native engine change. The migrated original workspace is not a clean checkout accepted by the full preparation script. A CI fixture tests preservation of simulated Team and engine-cache changes; actual local Xcode changes may differ.
 
+## One-time activation on the existing iPhone project
+
+The frozen full native build at b373669 succeeded (run 45930035353, Xcode 27.1), and the original-to-new source-only migration and missing-only recovery tests passed in 45933844455. Renewal and regular validation passed in 45938627280. None of these establishes that an installed iPhone can load Steam.
+
+After generating the initial signed release locally and updating the original Xcode workspace with the checked source-only migration, use:
+
+    bash scripts/configure-iphone-support-trust.sh --check "/path/to/original/madeira-workspace" "$HOME/.gamebridge-support/release-1"
+    bash scripts/configure-iphone-support-trust.sh --apply "/path/to/original/madeira-workspace" "$HOME/.gamebridge-support/release-1"
+
+Close Xcode before applying. The tool verifies public-key identity and the signed envelope, embeds only two public values in the research Info.plist, and preserves the original file in a local backup. It refuses an absent overlay or different embedded key. It reads no private key and changes no signing entitlements, project settings or native runtime artifacts. Rebuild and sign the app once using the existing device setup. This local plist edit must be preserved in future source migrations. The support-catalog branch still needs both public JSON files published; merely embedding a key does not activate the remote channel.
+
+A separate operations-only PR #3 proposes default-branch monitoring and issue triage without merging native source or distributing any binaries. It pins the previously validated verifier revision. No merge or live issue/scheduled-job execution is claimed.
+
 ## Reporting and triage
 
 Before preparation, after preparation/failure and when a session ends, store a small known-module PE status report locally. The Wine log hook additionally collects bounded, deduplicated module-not-found/load-failed DLL basenames, even when live log display is suppressed. It does not capture raw paths, Steam passwords, account identifiers, tokens, pairing files or full logs. Not every graphical fatal dialog emits a parsable log; static presence cannot prove the runtime loader can load a file.
