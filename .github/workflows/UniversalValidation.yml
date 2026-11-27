@@ -211,7 +211,7 @@ jobs:
       - name: Exercise public trust activation in migrated iPhone project
         run: |
           set -euo pipefail
-          bash -n scripts/configure-iphone-support-trust.sh
+          bash -n scripts/configure-iphone-support-trust.sh scripts/publish-mobile-support-review.sh
           export HOME="$RUNNER_TEMP/support-test-home"
           public="$HOME/.gamebridge-support/release-1"
           project="$RUNNER_TEMP/madeira-old"
