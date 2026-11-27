@@ -11,6 +11,7 @@ import pathlib
 import struct
 import subprocess
 import tempfile
+import time
 import zipfile
 
 ORIGIN = "https://client-update.akamai.steamstatic.com/"
@@ -59,6 +60,38 @@ def catalog_packages(payload):
     return result
 
 
+def download_archive(name, size, file):
+    """Retry transient CDN failures explicitly, including proxy CONNECT errors."""
+    transient_http = {"408", "429", "500", "502", "503", "504"}
+    transient_transport = {5, 6, 7, 18, 28, 52, 55, 56, 92}
+    for attempt in range(3):
+        # Never reuse a partial file from an earlier transfer.
+        file.unlink(missing_ok=True)
+        result = subprocess.run(
+            ["curl", "--proto", "=https", "--fail", "--silent", "--show-error",
+             "--connect-timeout", "20", "--max-time", "120",
+             "--max-filesize", str(size), "--write-out",
+             "%{http_code} %{http_connect}", "-o", str(file), ORIGIN + name],
+            capture_output=True, text=True,
+        )
+        if result.returncode == 0:
+            return
+        codes = set(result.stdout.split())
+        retryable = bool(codes & transient_http) or (
+            result.returncode in transient_transport
+            and codes <= {"000", "200"}
+        )
+        file.unlink(missing_ok=True)
+        if not retryable or attempt == 2:
+            raise RuntimeError(
+                f"Official archive transfer failed: {name}; curl={result.returncode}; "
+                f"HTTP={result.stdout.strip()}"
+            )
+        delay = 5 * (2 ** attempt)
+        print(f"Transient CDN failure for {name}; retry in {delay}s", flush=True)
+        time.sleep(delay)
+
+
 def inventory(packages=PACKAGES, client_identity="71b391fe9f3e2006cbc81a5c75eef3eb4186012deabfdb2c8b7e8d4850ecf640"):
     seen = set()
     all_files = set()
@@ -66,9 +99,7 @@ def inventory(packages=PACKAGES, client_identity="71b391fe9f3e2006cbc81a5c75eef3
     with tempfile.TemporaryDirectory(prefix="gamebridge-steam-inventory-") as folder:
         for name, size, sha in packages:
             file = pathlib.Path(folder) / name
-            subprocess.run(["curl", "--proto", "=https", "--fail", "--silent", "--show-error",
-                            "--retry", "2", "--connect-timeout", "20", "--max-time", "120",
-                            "--max-filesize", str(size), "-o", str(file), ORIGIN + name], check=True)
+            download_archive(name, size, file)
             if file.stat().st_size != size:
                 raise ValueError("Official archive size mismatch")
             with file.open("rb") as f:
