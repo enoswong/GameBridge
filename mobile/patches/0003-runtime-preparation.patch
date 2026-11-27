@@ -78,7 +78,14 @@ diff --git a/app/Madeira.xcodeproj/project.pbxproj b/app/Madeira.xcodeproj/proje
  		A1000524 /* DockInstallers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000524 /* DockInstallers.swift */; };
  		A1000542 /* DockStartProgram.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000542 /* DockStartProgram.swift */; };
  		A1000913 /* DockReset.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000913 /* DockReset.swift */; };
-@@ -367,6 +372,11 @@
+@@ -116,5 +121,6 @@
+ 		A1000021 /* libwineserver.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A2000020 /* libwineserver.a */; };
+ 		A1000022 /* nls in Resources */ = {isa = PBXBuildFile; fileRef = A2000021 /* nls */; };
+ 		A10009A1 /* fonts-ja in Resources */ = {isa = PBXBuildFile; fileRef = A20009A1 /* fonts-ja */; };
++		AB010006 /* gamebridge-probes in Resources */ = {isa = PBXBuildFile; fileRef = AB020006 /* gamebridge-probes */; };
+ 		A1000030 /* WineProcessBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = A2000030 /* WineProcessBridge.m */; };
+ 		A1000031 /* libntdll_unix.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A2000032 /* libntdll_unix.a */; };
+@@ -367,6 +373,11 @@
  		A200060D /* SteamLibraryFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SwiftSteam/Library/SteamLibraryFetcher.swift"; sourceTree = "<group>"; };
  		A2000522 /* SteamKeyValues.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SteamKeyValues.swift"; sourceTree = "<group>"; };
  		A2000523 /* SteamRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SteamRuntime.swift"; sourceTree = "<group>"; };
@@ -90,7 +97,14 @@ diff --git a/app/Madeira.xcodeproj/project.pbxproj b/app/Madeira.xcodeproj/proje
  		A2000524 /* DockInstallers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DockInstallers.swift"; sourceTree = "<group>"; };
  		A2000542 /* DockStartProgram.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DockStartProgram.swift"; sourceTree = "<group>"; };
  		A2000913 /* DockReset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockReset.swift; sourceTree = "<group>"; };
-@@ -695,6 +705,11 @@
+@@ -406,5 +417,6 @@
+ 		A2000020 /* libwineserver.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libwineserver.a; sourceTree = "<group>"; };
+ 		A2000021 /* nls */ = {isa = PBXFileReference; lastKnownFileType = folder; path = nls; sourceTree = "<group>"; };
+ 		A20009A1 /* fonts-ja */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "fonts-ja"; sourceTree = "<group>"; };
++		AB020006 /* gamebridge-probes */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "gamebridge-probes"; sourceTree = "<group>"; };
+ 		A2000030 /* WineProcessBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = WineProcessBridge.m; sourceTree = "<group>"; };
+ 		A2000031 /* WineProcessBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WineProcessBridge.h; sourceTree = "<group>"; };
+@@ -695,6 +707,11 @@
  				A200060D /* SteamLibraryFetcher.swift */,
  				A2000522 /* SteamKeyValues.swift */,
  				A2000523 /* SteamRuntime.swift */,
@@ -102,7 +116,21 @@ diff --git a/app/Madeira.xcodeproj/project.pbxproj b/app/Madeira.xcodeproj/proje
  				A2000524 /* DockInstallers.swift */,
  				A2000542 /* DockStartProgram.swift */,
  				A2000913 /* DockReset.swift */,
-@@ -1160,6 +1175,11 @@
+@@ -779,5 +796,6 @@
+ 				B2000051 /* Madeira JIT.shortcut */,
+ 				A2000021 /* nls */,
+ 				A20009A1 /* fonts-ja */,
++				AB020006 /* gamebridge-probes */,
+ 				A2000033 /* aarch64-windows */,
+ 				A20000F1 /* legal */,
+@@ -1000,5 +1018,6 @@
+ 			files = (
+ 				A1000022 /* nls in Resources */,
+ 				A10009A1 /* fonts-ja in Resources */,
++				AB010006 /* gamebridge-probes in Resources */,
+ 				A1000032 /* aarch64-windows in Resources */,
+ 				A10000F1 /* legal in Resources */,
+@@ -1160,6 +1179,11 @@
  				A100060D /* SwiftSteam/Library/SteamLibraryFetcher.swift in Sources */,
  				A1000522 /* SteamKeyValues.swift in Sources */,
  				A1000523 /* SteamRuntime.swift in Sources */,
