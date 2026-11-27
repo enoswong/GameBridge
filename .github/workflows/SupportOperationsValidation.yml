@@ -6,6 +6,7 @@ on:
       - '.github/workflows/SupportCatalogMonitor.yml'
       - '.github/workflows/SupportIssueTriage.yml'
       - '.github/workflows/SupportOperationsValidation.yml'
+      - 'scripts/test-support-operations.cjs'
 permissions:
   contents: read
 jobs:
@@ -39,4 +40,12 @@ jobs:
               puts "#{name}: parsed and syntax checked"
             end
           '
+      - name: Exercise exact monitor alert behavior offline
+        run: |
+          ruby -ryaml -e '
+            doc = YAML.safe_load(File.read(".github/workflows/SupportCatalogMonitor.yml"))
+            step = doc.fetch("jobs").fetch("check").fetch("steps").find { |s| s["name"] == "Open or resolve one maintainer alert" }
+            print step.fetch("with").fetch("script")
+          ' > "$RUNNER_TEMP/monitor-alert.js"
+          node scripts/test-support-operations.cjs "$RUNNER_TEMP/monitor-alert.js"
       # This is deliberately read-only. No live issues are created from PR events.
