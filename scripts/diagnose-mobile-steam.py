@@ -38,6 +38,8 @@ def facts(data):
 
 def inventory():
     seen = set()
+    all_files = set()
+    client_hash = None
     with tempfile.TemporaryDirectory(prefix="gamebridge-steam-inventory-") as folder:
         for name, size, sha in PACKAGES:
             file = pathlib.Path(folder) / name
@@ -53,6 +55,14 @@ def inventory():
                 print(name.split(".zip")[0] + ": verified; " + str(len(archive.infolist())) + " entries")
                 for entry in archive.infolist():
                     relative = entry.filename.replace("\\", "/").lower()
+                    if entry.is_dir() or relative.endswith("/"):
+                        continue
+                    parts = relative.split("/")
+                    if not relative or any(not part or part in {".", ".."} or ":" in part for part in parts):
+                        raise ValueError("Unsafe official ZIP path")
+                    if relative in all_files:
+                        raise ValueError("Conflicting file in official archive cohort: " + relative)
+                    all_files.add(relative)
                     if pathlib.PurePosixPath(relative).name not in WATCH_BASENAMES:
                         continue
                     if entry.file_size > 64 * 1024 * 1024:
@@ -60,7 +70,14 @@ def inventory():
                     data = archive.read(entry)
                     print("  " + relative + ": " + str(len(data)) + " bytes; " + facts(data))
                     seen.add(relative)
+                    if relative == "steamclient64.dll":
+                        client_hash = hashlib.sha256(data).hexdigest()
+    if not {"steam.exe", "bin/vgui2_s.dll", "steamclient64.dll"}.issubset(seen):
+        raise ValueError("Pinned desktop cohort is incomplete")
+    if client_hash != "71b391fe9f3e2006cbc81a5c75eef3eb4186012deabfdb2c8b7e8d4850ecf640":
+        raise ValueError("Pinned Steam client64 identity mismatch")
     print("Pinned packages contain bin/vgui2_s.dll:", "bin/vgui2_s.dll" in seen)
+    print("Non-conflicting verified file cohort:", len(all_files))
     print("Inventory only; no files installed and no desktop startup claimed.")
 
 
