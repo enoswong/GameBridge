@@ -1,0 +1,94 @@
+name: Validate mobile support publication
+on:
+  push:
+    branches: [support-catalog]
+    paths: ['mobile/steam-seed.json', 'mobile/trust.json', '.github/workflows/SupportCatalog.yml']
+  pull_request:
+    branches: [support-catalog]
+    paths: ['mobile/steam-seed.json', 'mobile/trust.json', '.github/workflows/SupportCatalog.yml']
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: catalog
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: bc017d153cec7b8206a3c3bd5da985e1318c1ff2
+          path: verifier
+          persist-credentials: false
+      - name: Verify signature and prevent trust or revision changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          cd catalog
+          if [[ ! -e mobile/steam-seed.json && ! -e mobile/trust.json ]]; then
+            if [[ -n "$BASE_SHA" && "$BASE_SHA" != 0000000000000000000000000000000000000000 ]]; then
+              git cat-file -e "$BASE_SHA^{commit}"
+              if git cat-file -e "$BASE_SHA:mobile/steam-seed.json" 2>/dev/null ||
+                 git cat-file -e "$BASE_SHA:mobile/trust.json" 2>/dev/null; then
+                echo "Refusing removal of published trust/catalog" >&2
+                exit 1
+              fi
+            fi
+            echo "Reserved channel, not active."
+            echo "CATALOG_ACTIVE=0" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          test -f mobile/steam-seed.json
+          test -f mobile/trust.json
+          test ! -L mobile/steam-seed.json
+          test ! -L mobile/trust.json
+          python3 - <<'PY'
+          import base64, hashlib, json, os, pathlib, re, subprocess
+          def read_json(path, limit):
+              p = pathlib.Path(path)
+              if p.stat().st_size > limit:
+                  raise ValueError("Metadata too large")
+              return json.loads(p.read_bytes())
+          trust = read_json("mobile/trust.json", 4096)
+          env = read_json("mobile/steam-seed.json", 65536)
+          if set(trust) != {"keyID", "publicKey"}:
+              raise ValueError("Unexpected trust metadata")
+          key = base64.b64decode(trust["publicKey"], validate=True)
+          if len(key) != 32 or hashlib.sha256(key).hexdigest()[:16] != trust["keyID"]:
+              raise ValueError("Public key identity mismatch")
+          data = base64.b64decode(env["payload"], validate=True)
+          payload = json.loads(data)
+          base = os.environ.get("BASE_SHA", "")
+          if base and base != "0" * 40:
+              if not re.fullmatch(r"[a-f0-9]{40}", base):
+                  raise ValueError("Invalid base revision")
+              subprocess.run(["git", "cat-file", "-e", base + "^{commit}"], check=True)
+              def prior(path):
+                  result = subprocess.run(["git", "show", base + ":" + path], capture_output=True)
+                  return result.stdout if result.returncode == 0 else None
+              old_trust = prior("mobile/trust.json")
+              old_catalog = prior("mobile/steam-seed.json")
+              if (old_trust is None) != (old_catalog is None):
+                  raise ValueError("Prior publication incomplete")
+              if old_trust is not None:
+                  if json.loads(old_trust) != trust:
+                      raise ValueError("Trust rotation requires separately reviewed native app update")
+                  old_data = base64.b64decode(json.loads(old_catalog)["payload"], validate=True)
+                  old_revision = json.loads(old_data)["revision"]
+                  if payload["revision"] < old_revision or (payload["revision"] == old_revision and data != old_data):
+                      raise ValueError("Catalog rollback or changed payload at same revision")
+          pathlib.Path(os.environ["RUNNER_TEMP"], "catalog-payload.json").write_bytes(data)
+          PY
+          swiftc -parse-as-library ../verifier/WhiskyKit/Sources/GameBridgeCore/MobileSupportCatalog.swift \
+            ../verifier/scripts/mobile-support-signer.swift -o "$RUNNER_TEMP/support-signer"
+          keyid="$(python3 -c 'import json; print(json.load(open("mobile/trust.json"))["keyID"])')"
+          pub="$(python3 -c 'import json; print(json.load(open("mobile/trust.json"))["publicKey"])')"
+          "$RUNNER_TEMP/support-signer" verify "$keyid" "$pub" mobile/steam-seed.json
+          echo "CATALOG_ACTIVE=1" >> "$GITHUB_ENV"
+      - name: Verify official Valve archives and matching client identity
+        if: env.CATALOG_ACTIVE == '1'
+        run: python3 verifier/scripts/diagnose-mobile-steam.py --catalog-payload "$RUNNER_TEMP/catalog-payload.json"
