@@ -28,7 +28,7 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
              .navigationBarTitleDisplayMode(.inline)
              .toolbarBackground(.regularMaterial, for: .navigationBar)
              // The library keeps a material bar only before iOS 26. From iOS 26 the
-@@ -1399,12 +1409,280 @@
+@@ -1399,12 +1409,312 @@
              }
              // A Home Screen shortcut (madeira://play?exe=...) starts its library entry,
              // now or, from a cold start, once the library is up.
@@ -45,6 +45,9 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
  
 -    /// The developer interface. Orientation comes from the view's own shape, not
 +    @State private var gameBridgeShowLibrary = false
++    @State private var gameBridgeGPU = false
++    @State private var gameBridgeV8 = false
++    @State private var gameBridgeConfigStatus = ""
 +    @State private var gameBridgePreparing = false
 +    @State private var gameBridgeAuditMessage = ""
 +    @State private var gameBridgeStage = "Ready to check"
@@ -85,6 +88,35 @@ diff --git a/app/Madeira/ContentView.swift b/app/Madeira/ContentView.swift
 +                if let error = library.error {
 +                    Text(error).foregroundStyle(.secondary).textSelection(.enabled)
 +                }
++                DisclosureGroup("Experimental Steam performance") {
++                    Toggle("Chromium GPU acceleration", isOn: Binding(
++                        get: { gameBridgeGPU },
++                        set: { value in
++                            if MadeiraConfig.set("env.MADEIRA_BIG_PICTURE_GPU", value ? "1" : "0") {
++                                gameBridgeGPU = value
++                                gameBridgeConfigStatus = "GPU preference saved; applies to the next Steam session."
++                            } else { gameBridgeConfigStatus = "Could not save GPU preference." }
++                        }
++                    ))
++                    Toggle("V8 JavaScript JIT", isOn: Binding(
++                        get: { gameBridgeV8 },
++                        set: { value in
++                            if MadeiraConfig.set("env.MADEIRA_JITLESS", value ? "0" : "1") {
++                                gameBridgeV8 = value
++                                gameBridgeConfigStatus = "V8 preference saved; applies to the next Steam session."
++                            } else { gameBridgeConfigStatus = "Could not save V8 preference." }
++                        }
++                    ))
++                    Text("Test one option at a time. Turn both off if Steam hangs; no game data is removed.")
++                        .font(.caption).foregroundStyle(.secondary)
++                    Text(gameBridgeConfigStatus).font(.caption)
++                }
++                .disabled(gameBridgePreparing || library.startingJIT != nil || library.launching)
++                .onAppear {
++                    gameBridgeGPU = MadeiraConfig.flag("MADEIRA_BIG_PICTURE_GPU", fallback: false)
++                    gameBridgeV8 = !MadeiraConfig.flag("MADEIRA_JITLESS", fallback: true)
++                }
++
 +                Button("Open experimental native game library") {
 +                    gameBridgeShowLibrary = true
 +                }
