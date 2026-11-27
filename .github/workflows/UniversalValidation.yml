@@ -24,7 +24,9 @@ jobs:
       - name: Test missing-only exported Steam recovery
         run: python3 scripts/test-iphone-steam-repair.py
       - name: Check research script syntax
-        run: bash -n scripts/prepare-mobile-engine.sh
+        run: |
+          bash -n scripts/prepare-mobile-engine.sh
+          bash -n scripts/prepare-mobile-cjk-fonts.sh
       - name: Verify fixed Microsoft runtime download before native build
         run: |
           bash -n scripts/fetch-mobile-vcruntime.sh
@@ -124,7 +126,7 @@ jobs:
           git -C "$RUNNER_TEMP/madeira-ios" apply "$GITHUB_WORKSPACE/mobile/patches/"*.patch
           xcrun --sdk iphoneos swiftc -frontend -parse -swift-version 5 \
             -target arm64-apple-ios18.0 -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
-            "$RUNNER_TEMP/madeira-ios/app/Madeira/"{ContentView,Library,MadeiraApp,SteamRuntime,VCRedist,JITNetwork,LogStore,RuntimeDependencyPolicy,PortableWindowsImportReader,PortableLegacyGameAudit,SteamDirectoryAudit,MobileSupportCatalog}.swift
+            "$RUNNER_TEMP/madeira-ios/app/Madeira/"{ContentView,Library,MadeiraApp,SteamRuntime,VCRedist,JITNetwork,LogStore,RuntimeDependencyPolicy,PortableWindowsImportReader,PortableLegacyGameAudit,SteamDirectoryAudit,MobileSupportCatalog,GameRecommendations}.swift
           xcrun plutil -lint "$RUNNER_TEMP/madeira-ios/app/Madeira/Info.plist" "$RUNNER_TEMP/madeira-ios/app/Madeira.xcodeproj/project.pbxproj"
       - name: Test in-place source upgrade from original device build
         run: |
