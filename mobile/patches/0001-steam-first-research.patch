@@ -372,7 +372,7 @@ diff --git a/app/Madeira/Library.swift b/app/Madeira/Library.swift
          entry.id = bigPictureID; entry.bigPicture = true; entry.graphicsAPI = "Steam"; entry.launchMode = "desktop"
          return entry
      }
-@@ -626,64 +619,43 @@
+@@ -626,64 +619,44 @@
      var listedInLibrary: Bool { bigPicture != true || Self.bigPictureShown }
      /// The button is offered when Big Picture's folder has a client, or the Dock's steam.exe
      /// can seed one.
@@ -450,6 +450,7 @@ diff --git a/app/Madeira/Library.swift b/app/Madeira/Library.swift
 +        // Do not disable Chromium sandboxing or prevent Steam security updates.
 +        let gpu = MadeiraConfig.flag("MADEIRA_BIG_PICTURE_GPU", fallback: false)
 +        LogStore.shared.log("[gamebridge-steam] CEF GPU acceleration requested=\(gpu ? 1 : 0)")
++        listMadeiraLibraries(in: folder)
 +        let bat = [
 +            "@echo off",
 +            "rem GameBridge desktop Steam research",
@@ -513,3 +514,19 @@ diff --git a/app/Madeira/GameRecommendations.swift b/app/Madeira/GameRecommendat
          env.MADEIRA_SRW_HANG_KILL_S = 40
          env.MADEIRA_TOUCH_MOUSE = 1
          env.MADEIRA_WOW_MIN_FREE_GB = 2
+diff --git a/app/Madeira/MadeiraDock.swift b/app/Madeira/MadeiraDock.swift
+--- a/app/Madeira/MadeiraDock.swift
++++ b/app/Madeira/MadeiraDock.swift
+@@ -141,6 +141,12 @@
+     static func steamLibraries(drive: URL) -> [String] {
+         let clientLibrary = SteamRuntimeFiles.relativeRoot + "/steamapps"
+         var libraries = [clientLibrary]
++        // Discover the isolated desktop client's installed games without changing its files.
++        let desktopLibrary = "Program Files/Steam Big Picture/steamapps"
++        var isDirectory: ObjCBool = false
++        if FileManager.default.fileExists(atPath: drive.appendingPathComponent(desktopLibrary).path, isDirectory: &isDirectory), isDirectory.boolValue {
++            libraries.append(desktopLibrary)
++        }
+         if let data = try? Data(contentsOf: drive.appendingPathComponent(clientLibrary + "/libraryfolders.vdf")),
+            data.count <= 1 << 20, var parser = try? SteamKeyValues(data), let root = try? parser.read() {
+             for (_, entry) in (root["libraryfolders"]?.fields ?? [:]).sorted(by: { $0.key < $1.key }) {
