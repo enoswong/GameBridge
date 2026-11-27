@@ -92,7 +92,6 @@ public enum MobileSupportCatalog {
 }
 #endif
 
-
 /// A small local failure history, collected even when the Wine log view is hidden.
 /// Only parsed DLL basenames and failure categories survive; raw text is never uploaded.
 public final class MobileSupportSignals: @unchecked Sendable {
