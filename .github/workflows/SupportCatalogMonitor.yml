@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 0e28d974c86e743cadcbbf4c3c96773630e33b96
+          ref: 4561f812a0265c2a3891b09508491c5e77269a73
           path: verifier
           persist-credentials: false
       - uses: actions/checkout@v4
@@ -39,6 +39,13 @@ jobs:
           test ! -L published/mobile/trust.json
           swiftc -parse-as-library verifier/WhiskyKit/Sources/GameBridgeCore/MobileSupportCatalog.swift \
             verifier/scripts/mobile-support-signer.swift -o "$RUNNER_TEMP/support-signer"
+          python3 - <<'PY'
+          import json, pathlib
+          published = json.loads(pathlib.Path("published/mobile/trust.json").read_bytes())
+          embedded = json.loads(pathlib.Path("verifier/mobile/support/trust.json").read_bytes())
+          if published != embedded:
+              raise ValueError("Published trust differs from the embedded maintainer anchor")
+          PY
           keyid="$(python3 -c 'import json; print(json.load(open("published/mobile/trust.json"))["keyID"])')"
           pub="$(python3 -c 'import json; print(json.load(open("published/mobile/trust.json"))["publicKey"])')"
           "$RUNNER_TEMP/support-signer" verify "$keyid" "$pub" published/mobile/steam-seed.json
