@@ -107,8 +107,23 @@ jobs:
           git -C "$RUNNER_TEMP/madeira-ios" apply "$GITHUB_WORKSPACE/mobile/patches/"*.patch
           xcrun --sdk iphoneos swiftc -frontend -parse -swift-version 5 \
             -target arm64-apple-ios18.0 -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
-            "$RUNNER_TEMP/madeira-ios/app/Madeira/"{ContentView,Library,MadeiraApp,SteamRuntime,VCRedist,JITNetwork,RuntimeDependencyPolicy,PortableWindowsImportReader,PortableLegacyGameAudit,SteamDirectoryAudit,MobileSupportCatalog}.swift
+            "$RUNNER_TEMP/madeira-ios/app/Madeira/"{ContentView,Library,MadeiraApp,SteamRuntime,VCRedist,JITNetwork,LogStore,RuntimeDependencyPolicy,PortableWindowsImportReader,PortableLegacyGameAudit,SteamDirectoryAudit,MobileSupportCatalog}.swift
           xcrun plutil -lint "$RUNNER_TEMP/madeira-ios/app/Madeira/Info.plist" "$RUNNER_TEMP/madeira-ios/app/Madeira.xcodeproj/project.pbxproj"
+      - name: Typecheck desktop installer and signed catalog on iPhone SDK
+        run: |
+          cat > "$RUNNER_TEMP/mobile-bridge-stubs.swift" <<'SWIFT'
+          func wine_process_is_running() -> Int32 { 0 }
+          func wineserver_is_running() -> Int32 { 0 }
+          func madeira_seed_prefix_if_needed(_ path: String) {}
+          SWIFT
+          xcrun --sdk iphoneos swiftc -typecheck -swift-version 5 \
+            -target arm64-apple-ios18.0 -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
+            "$RUNNER_TEMP/mobile-bridge-stubs.swift" \
+            "$RUNNER_TEMP/madeira-ios/app/Madeira/"{SteamRuntime,MobileSupportCatalog}.swift
+      - name: Compile offline catalog signer
+        run: |
+          swiftc -parse-as-library WhiskyKit/Sources/GameBridgeCore/MobileSupportCatalog.swift \
+            scripts/mobile-support-signer.swift -o "$RUNNER_TEMP/mobile-support-signer"
       - name: Resolve app dependencies
         run: |
           xcodebuild -resolvePackageDependencies -project Whisky.xcodeproj \
