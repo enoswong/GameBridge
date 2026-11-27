@@ -1,5 +1,8 @@
 name: Universal validation
 on:
+  push:
+    branches:
+      - gamebridge-native-performance
   pull_request:
     branches:
       - codex/gamebridge-guided-steam
@@ -19,6 +22,17 @@ jobs:
         run: python3 scripts/test-mobile-ipa-verifier.py
       - name: Test iPhone development signing policy
         run: python3 scripts/test-iphone-development-signing.py
+      - name: Build and verify standalone native probe
+        run: |
+          command -v clang
+          command -v lld-link
+          python3 scripts/test-mobile-native-probe.py
+          bash scripts/build-mobile-native-probe.sh "$RUNNER_TEMP/native-probe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gamebridge-native-smoke-x64
+          path: ${{ runner.temp }}/native-probe/GameBridge-native-smoke-x64.exe
+          if-no-files-found: error
       - name: Test offline iPhone performance audit
         run: python3 scripts/test-mobile-session-audit.py
       - name: Test official archive transfer retry policy
@@ -30,6 +44,8 @@ jobs:
           bash -n scripts/prepare-mobile-engine.sh
           bash -n scripts/prepare-mobile-cjk-fonts.sh
           bash -n scripts/upgrade-iphone-steam-support.sh
+          bash -n scripts/build-mobile-native-probe.sh
+          bash -n scripts/stage-mobile-native-probe.sh
       - name: Verify fixed Microsoft runtime download before native build
         run: |
           bash -n scripts/fetch-mobile-vcruntime.sh
