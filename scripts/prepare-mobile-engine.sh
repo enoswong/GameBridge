@@ -92,6 +92,9 @@ if [[ "$mode" == *build ]]; then
     if [[ "$research_ui" == 1 ]]; then
         bash "$root/scripts/fix-iphone-wow64-opengl.sh" --apply "$workspace"
     fi
+    if [[ "$research_ui" == 1 ]]; then
+        bash "$root/scripts/prepare-mobile-cjk-fonts.sh" "$workspace"
+    fi
     printf 'Building mobile research IPA (not a GameBridge release).\n'
     # The upstream CI path assumes separate native/i386 cache jobs. Run the full
     # local-source path on our isolated runner instead, including i386.
