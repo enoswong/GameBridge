@@ -49,6 +49,15 @@ For each subsequent release, use the reviewed payload with a higher revision and
 
 Publish both public JSON files together to the support-catalog branch, preferably through a PR with the validation check passing. A 30-day renewal requires the maintainer's offline signature even when package pins remain unchanged. Do not rotate trust on this branch alone. The workflow detects invalid/deleted metadata, unchanged-revision content changes and trust replacement relative to the previous commit. This does not automate discovering newer official packages or certify their runtime compatibility.
 
+The repository is public and its default branch is main (verified through repository metadata). Apps do not need a GitHub token to fetch the signed raw catalog. The current support-catalog branch contains no active trust.json or steam-seed.json.
+
+To create an atomic review branch containing both public files from the maintainer's existing Git login:
+
+    bash scripts/publish-mobile-support-review.sh --check "$HOME/.gamebridge-support/release-1"
+    bash scripts/publish-mobile-support-review.sh --push-review "$HOME/.gamebridge-support/release-1"
+
+The helper clones the current support-catalog into an isolated temporary directory, rejects a trust change or non-increasing revision, verifies the signed envelope and official archive contents, and pushes only two public JSON files on a new review branch. It does not read the private key, push directly to the live branch, force push or merge. Review and merge the catalog PR only after the publication workflow passes. Existing Git authentication and author identity are required. The helper's real authenticated push has not been exercised.
+
 ## Renewal and health monitoring
 
 To renew the same reviewed package cohort, copy the latest published mobile/steam-seed.json locally, then run:
