@@ -1,7 +1,7 @@
 diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
 --- a/app/Madeira/SteamRuntime.swift
 +++ b/app/Madeira/SteamRuntime.swift
-@@ -325,6 +325,184 @@
+@@ -325,6 +325,187 @@
          await progress("Steam components are ready.")
      }
  
@@ -43,7 +43,8 @@ diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
 +        }
 +        let hasGUI = hasModule("bin/vgui2_s.dll") || hasModule("win64/vgui2_s.dll")
 +        let hasClientLibrary = hasModule("steamclient.dll") || hasModule("steamclient64.dll")
-+        if hasClient && hasGUI && hasClientLibrary { return }
++        let pendingKey = "GameBridge.steamSeedPending.v1"
++        if hasClient && hasGUI && hasClientLibrary && !UserDefaults.standard.bool(forKey: pendingKey) { return }
 +        // Keep an existing updated or foreign install intact. No mixed-version overwrite.
 +        let catalog = try await desktopSupportCatalog()
 +        let packages = catalog?.packages ?? SteamRuntimeFiles.packages.map {
@@ -113,6 +114,7 @@ diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
 +                missing.append((source, destination))
 +            }
 +        }
++        UserDefaults.standard.set(true, forKey: pendingKey)
 +        for (source, destination) in missing {
 +            try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
 +            let temp = destination.deletingLastPathComponent().appendingPathComponent(".gamebridge-" + UUID().uuidString)
@@ -120,6 +122,7 @@ diff --git a/app/Madeira/SteamRuntime.swift b/app/Madeira/SteamRuntime.swift
 +            try fm.copyItem(at: source, to: temp)
 +            try fm.moveItem(at: temp, to: destination)
 +        }
++        UserDefaults.standard.removeObject(forKey: pendingKey)
 +    }
 +
 +    /// The configured trust anchor is part of the native app signature. There is no
