@@ -1,0 +1,52 @@
+name: Classify GameBridge support reports
+on:
+  issues:
+    types: [opened, reopened]
+permissions:
+  contents: read
+  issues: write
+jobs:
+  classify:
+    if: startsWith(github.event.issue.title, '[iOS] Steam component failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            // Issue text is untrusted input; no shell commands or dynamic labels.
+            const issue = context.payload.issue;
+            const body = (issue.body || "").slice(0, 16384).toLowerCase();
+            const labels = [
+              ["component-report", "1D76DB", "User-submitted GameBridge component report"],
+              ["ios", "5319E7", "iOS research target"],
+              ["needs-triage", "FBCA04", "Requires maintainer reproduction and source verification"]
+            ];
+            if (/\bmissing:[a-z0-9_.+-]+\.dll\b|missing-or-conflict/.test(body)) {
+              labels.push(["missing-module", "D93F0B", "Possible missing module; not confirmed"]);
+            }
+            if (/\bload-failed:[a-z0-9_.+-]+\.dll\b/.test(body)) {
+              labels.push(["loader-failure", "D93F0B", "Module load failure; may be an indirect dependency"]);
+            }
+            if (/vgui2_s\.dll|steamclient(?:64)?\.dll|steamui\.dll/.test(body)) {
+              labels.push(["steam-client", "006B75", "Steam client component"]);
+            }
+            for (const [name, color, description] of labels) {
+              try {
+                await github.rest.issues.getLabel({ ...context.repo, name });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+                try {
+                  await github.rest.issues.createLabel({ ...context.repo, name, color, description });
+                } catch (createError) {
+                  if (createError.status !== 422) throw createError;
+                  await github.rest.issues.getLabel({ ...context.repo, name });
+                }
+              }
+            }
+            await github.rest.issues.addLabels({
+              ...context.repo,
+              issue_number: issue.number,
+              labels: labels.map(([name]) => name)
+            });
+            // No automatic package publication, account data forwarding, or execution.
