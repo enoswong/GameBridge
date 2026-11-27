@@ -229,6 +229,26 @@ jobs:
           grep -q 'fixture engine cache' "$project/engine-sentinel"
           cmp "$RUNNER_TEMP/madeira-ios/app/Madeira/SteamRuntime.swift" "$project/app/Madeira/SteamRuntime.swift"
           cmp "$RUNNER_TEMP/madeira-ios/app/Madeira/Info.plist" "$project/app/Madeira/Info.plist"
+      - name: Test incremental upgrade from native-v1
+        run: |
+          set -euo pipefail
+          baseline=c81f30ed57c19c72bc477b6b38ca9893d9bbfff4
+          git fetch --no-tags --depth=1 origin "$baseline"
+          git clone --shared "$RUNNER_TEMP/madeira-ios" "$RUNNER_TEMP/madeira-native-v1"
+          project="$RUNNER_TEMP/madeira-native-v1"
+          git -C "$project" remote set-url origin https://github.com/willfaust/Madeira.git
+          mkdir "$RUNNER_TEMP/native-v1-patches"
+          for patch in mobile/patches/*.patch; do
+            git show "$baseline:$patch" > "$RUNNER_TEMP/native-v1-patches/$(basename "$patch")"
+          done
+          git -C "$project" apply "$RUNNER_TEMP/native-v1-patches/"*.patch
+          printf 'fixture engine cache' > "$project/engine-sentinel"
+          cp "$project/app/Madeira.xcodeproj/project.pbxproj" "$RUNNER_TEMP/native-v1-project.pbxproj"
+          bash scripts/update-existing-iphone-project.sh --check "$project" native-v1
+          bash scripts/update-existing-iphone-project.sh --apply "$project" native-v1
+          cmp "$project/app/Madeira.xcodeproj/project.pbxproj" "$RUNNER_TEMP/native-v1-project.pbxproj"
+          grep -q 'fixture engine cache' "$project/engine-sentinel"
+          cmp "$project/app/Madeira/ContentView.swift" "$RUNNER_TEMP/madeira-ios/app/Madeira/ContentView.swift"
       - name: Typecheck desktop installer and signed catalog on iPhone SDK
         run: |
           cat > "$RUNNER_TEMP/mobile-bridge-stubs.swift" <<'SWIFT'
