@@ -12,11 +12,11 @@ concurrency:
 jobs:
   check:
     runs-on: macos-15
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 4561f812a0265c2a3891b09508491c5e77269a73
+          ref: 1bfd71316184ffddb23a763fdad9772e398dc988
           path: verifier
           persist-credentials: false
       - uses: actions/checkout@v4
@@ -29,9 +29,9 @@ jobs:
         run: |
           set -euo pipefail
           if [[ ! -e published/mobile/steam-seed.json && ! -e published/mobile/trust.json ]]; then
-            echo "Support channel is not activated."
-            echo "state=not-activated" >> "$GITHUB_OUTPUT"
-            exit 0
+            echo "Activated support channel metadata is missing." >&2
+            echo "state=missing" >> "$GITHUB_OUTPUT"
+            exit 1
           fi
           test -f published/mobile/steam-seed.json
           test -f published/mobile/trust.json
