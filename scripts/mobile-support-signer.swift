@@ -26,6 +26,14 @@ struct MobileCatalogSigner {
             print("GAMEBRIDGE_SUPPORT_PUBLIC_KEY=" + key.publicKey.rawRepresentation.base64EncodedString())
             return
         }
+        if args.count == 2 && args[0] == "public-key" {
+            let key = try Curve25519.Signing.PrivateKey(
+                rawRepresentation: Data(contentsOf: URL(fileURLWithPath: args[1])))
+            let trust = ["keyID": keyID(key), "publicKey": key.publicKey.rawRepresentation.base64EncodedString()]
+            let data = try JSONSerialization.data(withJSONObject: trust, options: [.sortedKeys, .prettyPrinted])
+            FileHandle.standardOutput.write(data)
+            return
+        }
         if args.count == 4 && args[0] == "verify" {
             guard let publicKey = Data(base64Encoded: args[2]), publicKey.count == 32 else {
                 throw MobileSupportCatalog.Failure.invalidCatalog
@@ -61,6 +69,7 @@ struct MobileCatalogSigner {
         }
         print("Usage: mobile-support-signer init-key PRIVATE_KEY | sign PRIVATE_KEY PAYLOAD_JSON ENVELOPE_JSON")
         print("       mobile-support-signer verify KEY_ID PUBLIC_KEY_BASE64 ENVELOPE_JSON")
+        print("       mobile-support-signer public-key PRIVATE_KEY")
         exit(2)
     }
 }
