@@ -45,31 +45,35 @@ struct MobileCatalogSigner {
             return
         }
         if args.count == 4 && args[0] == "sign" {
-            let keyURL = URL(fileURLWithPath: args[1])
-            let values = try keyURL.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-            guard values.isRegularFile == true, values.isSymbolicLink == false else {
-                throw CocoaError(.fileReadNoPermission)
-            }
-            let attrs = try FileManager.default.attributesOfItem(atPath: keyURL.path)
-            guard let mode = attrs[.posixPermissions] as? NSNumber, mode.intValue & 0o077 == 0 else {
-                throw CocoaError(.fileReadNoPermission)
-            }
-            let key = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(contentsOf: keyURL))
-            let payload = try Data(contentsOf: URL(fileURLWithPath: args[2]))
-            guard payload.count <= 40 * 1024 else { throw MobileSupportCatalog.Failure.invalidCatalog }
-            let envelope = try JSONSerialization.data(withJSONObject: [
-                "keyID": keyID(key), "payload": payload.base64EncodedString(),
-                "signature": key.signature(for: payload).base64EncodedString()
-            ], options: [.sortedKeys])
-            let verified = try MobileSupportCatalog.verify(envelope, keyID: keyID(key),
-                publicKey: key.publicKey.rawRepresentation, now: Int(Date().timeIntervalSince1970))
-            try envelope.write(to: URL(fileURLWithPath: args[3]), options: .withoutOverwriting)
-            print("Signed and verified catalog revision \(verified.payload.revision)")
+            try sign(keyPath: args[1], payloadPath: args[2], outputPath: args[3])
             return
         }
         print("Usage: mobile-support-signer init-key PRIVATE_KEY | sign PRIVATE_KEY PAYLOAD_JSON ENVELOPE_JSON")
         print("       mobile-support-signer verify KEY_ID PUBLIC_KEY_BASE64 ENVELOPE_JSON")
         print("       mobile-support-signer public-key PRIVATE_KEY")
         exit(2)
+    }
+
+    private static func sign(keyPath: String, payloadPath: String, outputPath: String) throws {
+        let keyURL = URL(fileURLWithPath: keyPath)
+        let values = try keyURL.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+        guard values.isRegularFile == true, values.isSymbolicLink == false else {
+            throw CocoaError(.fileReadNoPermission)
+        }
+        let attrs = try FileManager.default.attributesOfItem(atPath: keyURL.path)
+        guard let mode = attrs[.posixPermissions] as? NSNumber, mode.intValue & 0o077 == 0 else {
+            throw CocoaError(.fileReadNoPermission)
+        }
+        let key = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(contentsOf: keyURL))
+        let payload = try Data(contentsOf: URL(fileURLWithPath: payloadPath))
+        guard payload.count <= 40 * 1024 else { throw MobileSupportCatalog.Failure.invalidCatalog }
+        let envelope = try JSONSerialization.data(withJSONObject: [
+            "keyID": keyID(key), "payload": payload.base64EncodedString(),
+            "signature": key.signature(for: payload).base64EncodedString()
+        ], options: [.sortedKeys])
+        let verified = try MobileSupportCatalog.verify(envelope, keyID: keyID(key),
+            publicKey: key.publicKey.rawRepresentation, now: Int(Date().timeIntervalSince1970))
+        try envelope.write(to: URL(fileURLWithPath: outputPath), options: .withoutOverwriting)
+        print("Signed and verified catalog revision \(verified.payload.revision)")
     }
 }
