@@ -91,3 +91,60 @@ public enum MobileSupportCatalog {
     }
 }
 #endif
+
+
+/// A small local failure history, collected even when the Wine log view is hidden.
+/// Only parsed DLL basenames and failure categories survive; raw text is never uploaded.
+public final class MobileSupportSignals: @unchecked Sendable {
+    public static let shared = MobileSupportSignals()
+    private let lock = NSLock()
+    private let storageKey = "GameBridge.recentModuleFailures.v1"
+    private let defaults: UserDefaults
+
+    public init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    public static func signal(from raw: String) -> String? {
+        guard raw.utf8.count <= 4096 else { return nil }
+        let lower = raw.lowercased()
+        let candidate: String
+        let kind: String
+        if lower.contains("err:module:import_dll"), lower.contains(" not found"),
+           let marker = lower.range(of: "library ") {
+            candidate = String(lower[marker.upperBound...].prefix(while: { !$0.isWhitespace }))
+            kind = "missing"
+        } else if let marker = lower.range(of: "could not load module '"),
+                  let end = lower[marker.upperBound...].firstIndex(of: "'") {
+            let path = String(lower[marker.upperBound..<end]).replacingOccurrences(of: "\\", with: "/")
+            guard !path.contains(":"), !path.hasPrefix("/") else { return nil }
+            candidate = path.split(separator: "/").last.map(String.init) ?? ""
+            kind = "load-failed"
+        } else {
+            return nil
+        }
+        guard candidate.utf8.count <= 120, candidate.hasSuffix(".dll"),
+              !candidate.hasPrefix("."),
+              candidate.utf8.allSatisfy({
+                  (97...122).contains($0) || (48...57).contains($0) || [43, 45, 46, 95].contains($0)
+              }) else { return nil }
+        return kind + ":" + candidate
+    }
+
+    public func record(_ raw: String) {
+        guard let signal = Self.signal(from: raw) else { return }
+        lock.lock()
+        defer { lock.unlock() }
+        var values = defaults.stringArray(forKey: storageKey) ?? []
+        if values.last == signal { return }
+        values.removeAll { $0 == signal }
+        values.append(signal)
+        defaults.set(Array(values.suffix(32)), forKey: storageKey)
+    }
+
+    public func recent() -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return Array((defaults.stringArray(forKey: storageKey) ?? []).suffix(32))
+    }
+}
