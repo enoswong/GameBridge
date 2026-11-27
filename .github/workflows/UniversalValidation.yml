@@ -89,6 +89,22 @@ jobs:
             git -C "$RUNNER_TEMP/source-$component" -c protocol.version=2 fetch --depth=1 --filter=blob:none --no-recurse-submodules "$url" "$revision"
             git -C "$RUNNER_TEMP/source-$component" cat-file -e "$revision^{commit}"
           done
+      - name: Reproduce and verify experimental FEX Win32 protection wrapper contract
+        run: |
+          bash -n scripts/experiment-fex-virtual-protect.sh
+          revision=1dc6ed4932bd231df1c53dd7b8043ffdee0ac34a
+          fixture="$RUNNER_TEMP/fex-protection-contract"
+          relative=FEXCore/include/FEXCore/Utils/AllocatorHooks.h
+          mkdir -p "$fixture/$(dirname "$relative")"
+          git -C "$RUNNER_TEMP/source-FEX" show "$revision:$relative" > "$fixture/$relative"
+          if python3 scripts/test-fex-virtual-protect.py "$fixture/$relative" > "$fixture/baseline.log" 2>&1; then
+            echo "Unpatched FEX unexpectedly passed" >&2
+            exit 1
+          fi
+          cat "$fixture/baseline.log"
+          grep -Fx '0/10 cases passed' "$fixture/baseline.log"
+          (cd "$fixture" && git apply --check "$GITHUB_WORKSPACE/mobile/fex-experiments/0001-win32-virtual-protect-contract.patch" && git apply "$GITHUB_WORKSPACE/mobile/fex-experiments/0001-win32-virtual-protect-contract.patch")
+          python3 scripts/test-fex-virtual-protect.py "$fixture/$relative"
       - name: Inventory pinned Steam packages for desktop module diagnosis
         run: python3 scripts/diagnose-mobile-steam.py --official-packages
       - name: Verify official Steam bootstrap archive
