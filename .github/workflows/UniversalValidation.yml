@@ -165,7 +165,7 @@ jobs:
       - name: Exercise local catalog publication without a production key
         run: |
           set -euo pipefail
-          bash -n scripts/init-mobile-support-channel.sh scripts/prepare-mobile-support-release.sh
+          bash -n scripts/init-mobile-support-channel.sh scripts/prepare-mobile-support-release.sh scripts/renew-mobile-support-channel.sh
           export HOME="$RUNNER_TEMP/support-test-home"
           mkdir -m 700 "$HOME"
           bash scripts/init-mobile-support-channel.sh
@@ -183,6 +183,31 @@ jobs:
             echo "Incorrect trust identity was accepted" >&2
             exit 1
           fi
+      - name: Exercise catalog renewal with the original maintainer key
+        run: |
+          set -euo pipefail
+          export HOME="$RUNNER_TEMP/support-test-home"
+          first="$HOME/.gamebridge-support/release-1"
+          next="$HOME/.gamebridge-support/release-2"
+          bash scripts/renew-mobile-support-channel.sh "$first/steam-seed.json" "$next"
+          cmp "$first/trust.json" "$next/trust.json"
+          python3 - "$first/steam-seed.json" "$next/steam-seed.json" <<'PY'
+          import base64, json, pathlib, sys
+          def payload(path):
+              return json.loads(base64.b64decode(json.loads(pathlib.Path(path).read_bytes())["payload"]))
+          first, next = map(payload, sys.argv[1:])
+          assert next["revision"] == first["revision"] + 1
+          assert next["packages"] == first["packages"]
+          assert next["clientSHA256"] == first["clientSHA256"]
+          assert next["issuedAt"] >= first["issuedAt"]
+          assert next["expiresAt"] >= first["expiresAt"]
+          PY
+          printf '{}' > "$RUNNER_TEMP/invalid-renewal.json"
+          if bash scripts/renew-mobile-support-channel.sh "$RUNNER_TEMP/invalid-renewal.json" "$RUNNER_TEMP/invalid-publication"; then
+            echo "Invalid renewal unexpectedly accepted" >&2
+            exit 1
+          fi
+          test ! -e "$RUNNER_TEMP/invalid-publication"
       - name: Resolve app dependencies
         run: |
           xcodebuild -resolvePackageDependencies -project Whisky.xcodeproj \
